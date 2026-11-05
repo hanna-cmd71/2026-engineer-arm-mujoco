@@ -111,6 +111,13 @@ python3 scripts/ros2_send_pose_target.py \
   --x 0.25 --y 0.05 --z 0.42
 ```
 
+Plan and execute a joint goal through MoveIt 2 OMPL:
+
+```bash
+python3 scripts/ros2_moveit_joint_goal.py \
+  --target 0.1,-0.8,0.8,0.1,0.3,-0.1
+```
+
 ## Tests
 
 Build test:

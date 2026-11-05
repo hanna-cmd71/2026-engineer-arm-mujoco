@@ -9,5 +9,8 @@ install(
 install(
   FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../../JGarm.urdf"
   DESTINATION "share/${PROJECT_NAME}/urdf")
+install(
+  DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/urdf/"
+  DESTINATION "share/${PROJECT_NAME}/urdf")
 
 ament_package()

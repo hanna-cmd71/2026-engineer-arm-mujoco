@@ -71,7 +71,7 @@ class MujocoSimNode final : public rclcpp::Node {
             });
     joint_state_publisher_ =
         create_publisher<sensor_msgs::msg::JointState>(
-            "/joint_states", rclcpp::SensorDataQoS());
+            "/joint_states", rclcpp::QoS(10).reliable());
     reset_service_ = create_service<std_srvs::srv::Trigger>(
         "/arm/sim/reset",
         [this](

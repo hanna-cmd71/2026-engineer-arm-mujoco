@@ -1,4 +1,4 @@
-"""ROS 2 node for KDL IK and PD plus Pinocchio gravity control."""
+"""High-rate JGarm joint controller and KDL pose target handler."""
 
 from __future__ import annotations
 
@@ -51,21 +51,15 @@ class ArmControlNode(Node):
         kd = self.declare_parameter(
             "kd", [2.0, 4.0, 4.0, 1.5, 1.0, 0.5]
         ).value
-        self._target_position = np.array(
-            self.declare_parameter(
-                "target_position", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-            ).value,
-            dtype=np.float64,
-        )
+        effort_limits = self.declare_parameter(
+            "effort_limits", [25.0, 63.0, 35.0, 18.0, 6.0, 3.0]
+        ).value
         control_rate_hz = float(
             self.declare_parameter("control_rate_hz", 500.0).value
         )
         self._state_timeout_s = float(
             self.declare_parameter("state_timeout_s", 0.2).value
         )
-        effort_limits = self.declare_parameter(
-            "effort_limits", [25.0, 63.0, 35.0, 18.0, 6.0, 3.0]
-        ).value
 
         self.kinematics = Kinematics(urdf_path)
         self.dynamics = PinocchioDynamics(urdf_path)
@@ -74,12 +68,19 @@ class ArmControlNode(Node):
             np.asarray(effort_limits),
             self.dynamics.gravity_torque,
         )
+        self._target_position = np.array(
+            self.declare_parameter(
+                "target_position", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            ).value,
+            dtype=np.float64,
+        )
+        self._target_velocity = np.zeros(JOINT_COUNT)
         self._latest_state: JointFeedback | None = None
         self._latest_state_time = 0.0
         self._current_position = np.zeros(JOINT_COUNT)
 
         state_qos = QoSProfile(
-            depth=1, reliability=ReliabilityPolicy.BEST_EFFORT
+            depth=10, reliability=ReliabilityPolicy.RELIABLE
         )
         self.create_subscription(
             JointState, "/joint_states", self._state_callback, state_qos
@@ -91,14 +92,18 @@ class ArmControlNode(Node):
             10,
         )
         self.create_subscription(
+            Float64MultiArray,
+            "/arm/target/joint_velocity",
+            self._joint_velocity_callback,
+            10,
+        )
+        self.create_subscription(
             PoseStamped, "/arm/target/pose", self._pose_target_callback, 10
         )
         self._effort_publisher = self.create_publisher(
             Float64MultiArray, "/arm/control/effort_cmd", 10
         )
-        self.create_timer(
-            1.0 / control_rate_hz, self._control_step
-        )
+        self.create_timer(1.0 / control_rate_hz, self._control_step)
         self.get_logger().info(
             f"Arm control started at {control_rate_hz:.0f} Hz"
         )
@@ -143,6 +148,19 @@ class ArmControlNode(Node):
             self.kinematics.joint_limits_rad[:, 0],
             self.kinematics.joint_limits_rad[:, 1],
         )
+        self._target_velocity = np.zeros(JOINT_COUNT)
+
+    def _joint_velocity_callback(
+        self, message: Float64MultiArray
+    ) -> None:
+        if len(message.data) != JOINT_COUNT:
+            self.get_logger().warning(
+                "Joint velocity target must contain six values"
+            )
+            return
+        target = np.asarray(message.data, dtype=np.float64)
+        if np.all(np.isfinite(target)):
+            self._target_velocity = target
 
     def _pose_target_callback(self, message: PoseStamped) -> None:
         if message.header.frame_id not in ("", "base_link"):
@@ -169,6 +187,7 @@ class ArmControlNode(Node):
         )
         if result.success:
             self._target_position = result.position_rad
+            self._target_velocity = np.zeros(JOINT_COUNT)
             self.get_logger().info(
                 "Pose IK accepted: "
                 f"position_error={result.position_error_m:.6e} m"
@@ -183,7 +202,9 @@ class ArmControlNode(Node):
         if age > self._state_timeout_s:
             return
         command = self.controller.compute(
-            self._latest_state, self._target_position
+            self._latest_state,
+            self._target_position,
+            self._target_velocity,
         )
         message = Float64MultiArray()
         message.data = command.effort_nm.tolist()

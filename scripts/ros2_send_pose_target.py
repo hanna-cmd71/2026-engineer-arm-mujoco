@@ -10,6 +10,7 @@ from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
 import numpy as np
 import rclpy
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import JointState
 
 from jgarm_control.kinematics import Kinematics
@@ -62,7 +63,12 @@ def main() -> None:
     def state_callback(message: JointState) -> None:
         state_holder["state"] = message
 
-    node.create_subscription(JointState, "/joint_states", state_callback, 10)
+    state_qos = QoSProfile(
+        depth=10, reliability=ReliabilityPolicy.RELIABLE
+    )
+    node.create_subscription(
+        JointState, "/joint_states", state_callback, state_qos
+    )
     while rclpy.ok() and "state" not in state_holder:
         rclpy.spin_once(node, timeout_sec=0.1)
     if "state" not in state_holder:

@@ -24,6 +24,7 @@ setup(
     entry_points={
         "console_scripts": [
             "control_node = jgarm_control.control_node:main",
+            "trajectory_bridge_node = jgarm_control.trajectory_bridge_node:main",
             "viewer_node = jgarm_control.viewer_node:main",
         ],
     },

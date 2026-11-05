@@ -39,7 +39,7 @@ class ArmViewerNode(Node):
         }
         self._latest_message: JointState | None = None
         qos = QoSProfile(
-            depth=1, reliability=ReliabilityPolicy.BEST_EFFORT
+            depth=10, reliability=ReliabilityPolicy.RELIABLE
         )
         self.create_subscription(
             JointState, "/joint_states", self._state_callback, qos
