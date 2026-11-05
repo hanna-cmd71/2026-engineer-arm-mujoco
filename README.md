@@ -33,6 +33,15 @@ Activate it:
 micromamba activate mujoco_env
 ```
 
+Build and install the official Python 3.10 KDL bindings and `kdl_parser_py`:
+
+```bash
+./scripts/install_kdl.sh
+```
+
+This step installs Pinocchio 4.1.0, PyKDL 1.5.1, and the URDF parser used by
+the numerical KDL inverse kinematics.
+
 If the current terminal previously sourced ROS, use the project activation
 script instead. It removes the stale ROS Python paths before activation:
 
@@ -91,6 +100,29 @@ Running pytest directly is also supported after activating the environment:
 
 ```bash
 python -m pytest -q
+```
+
+## Kinematics and control
+
+The Python package provides:
+
+```text
+Kinematics              KDL FK, Jacobian, and numerical IK
+PinocchioDynamics       fixed-base generalized gravity
+PDGravityController     joint PD plus gravity feedforward
+```
+
+Solve and display an IK target:
+
+```bash
+python scripts/demo_ik.py --x 0.50 --y 0.00 --z 0.50
+```
+
+Run joint PD control with Pinocchio gravity compensation:
+
+```bash
+python scripts/demo_pd_gravity.py \
+  --target 0.1,-0.8,0.8,0.1,0.3,-0.1
 ```
 
 ## Use the Python API

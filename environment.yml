@@ -12,3 +12,6 @@ dependencies:
       - trimesh==5.2.0
       - fast-simplification==0.2.0
       - pytest==9.2.0
+      - pin==4.1.0
+      - urdf-parser-py==0.0.4
+      - catkin_pkg==1.1.1
