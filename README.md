@@ -33,6 +33,14 @@ Activate it:
 micromamba activate mujoco_env
 ```
 
+If the current terminal previously sourced ROS, use the project activation
+script instead. It removes the stale ROS Python paths before activation:
+
+```bash
+cd /sim-workspaces/JGarm
+source scripts/activate_env.sh
+```
+
 Verify the active interpreter:
 
 ```bash
@@ -71,6 +79,15 @@ python scripts/view_model.py --physics
 ```
 
 ## Run tests
+
+```bash
+./scripts/run_tests.sh -q
+```
+
+The test wrapper disables pytest plugin auto-discovery so ROS Jazzy pytest
+plugins cannot be loaded by the Python 3.10 MuJoCo environment.
+
+Running pytest directly is also supported after activating the environment:
 
 ```bash
 python -m pytest -q
