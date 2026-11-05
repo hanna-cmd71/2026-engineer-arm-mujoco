@@ -1,138 +1,133 @@
 # JGarm MuJoCo Simulation
 
-Python-first MuJoCo simulation for the six-axis JGarm manipulator. The
-simulation is independent of ROS and jRMCS hardware runtime code. Its
-low-level state and torque command semantics remain compatible with the
-planned jRMCS arm interface.
+ROS 2 Jazzy simulation for the six-axis JGarm manipulator.
+
+## Architecture
+
+```text
+C++23 jgarm_sim_cpp
+  MuJoCo 3.17 physics
+  1 kHz simulation timer
+  /joint_states publisher
+  /arm/control/effort_cmd subscriber
+  /arm/sim/reset service
+
+Python 3.12 jgarm_control
+  KDL numerical IK
+  Pinocchio generalized gravity
+  PD gravity feedforward controller
+  MuJoCo passive viewer driven by /joint_states
+```
+
+The C++ node owns physics. The Python nodes never advance the dynamic model;
+they compute control and render the current ROS joint state.
 
 ## Environment
 
-This project uses one Micromamba root and one environment:
+The ROS 2 runtime uses ROS 2 Jazzy with system Python 3.12. A project-local
+`.ros-venv` adds MuJoCo, Pinocchio, and URDF parsing without mixing in the
+legacy Python 3.10 environment.
 
-```text
-Micromamba:  /opt/sim-envs/bin/micromamba
-Root:        /home/hanner/micromamba
-Environment: mujoco_env
-Python:      3.10
-```
+The default C++ SDK path is `/sim-workspaces/mujoco-3.17.0`. Override it
+before building with `export MUJOCO_ROOT=/path/to/mujoco`.
 
-ROS Jazzy must not be sourced in the same shell because it injects Python 3.12
-packages into this Python 3.10 environment.
-
-Create the environment:
-
-```bash
-MAMBA_ROOT_PREFIX="$HOME/micromamba" \
-/opt/sim-envs/bin/micromamba env create \
-  -f environment.yml
-```
-
-Activate it:
-
-```bash
-micromamba activate mujoco_env
-```
-
-Build and install the official Python 3.10 KDL bindings and `kdl_parser_py`:
-
-```bash
-./scripts/install_kdl.sh
-```
-
-This step installs Pinocchio 4.1.0, PyKDL 1.5.1, and the URDF parser used by
-the numerical KDL inverse kinematics.
-
-If the current terminal previously sourced ROS, use the project activation
-script instead. It removes the stale ROS Python paths before activation:
+Install or refresh the runtime:
 
 ```bash
 cd /sim-workspaces/JGarm
-source scripts/activate_env.sh
+./scripts/install_ros2_env.sh
 ```
 
-Verify the active interpreter:
+Activate ROS 2, the Python 3.12 paths, and the built workspace:
 
 ```bash
-which python
-python --version
-echo "$PYTHONPATH"
+source scripts/activate_ros2_env.sh
 ```
 
-Expected:
+The script can also be used before the first build; it sources the workspace
+setup only when it exists.
+
+## Build
+
+```bash
+cd /sim-workspaces/JGarm
+source scripts/activate_ros2_env.sh
+
+cd ros2_ws
+colcon build --symlink-install
+```
+
+After building, open a new shell or reload the environment:
+
+```bash
+cd /sim-workspaces/JGarm
+source scripts/activate_ros2_env.sh
+```
+
+## Run
+
+Start the C++ MuJoCo simulation, Python controller, robot state publisher,
+and live MuJoCo viewer:
+
+```bash
+ros2 launch jgarm_bringup sim.launch.py
+```
+
+Run headless:
+
+```bash
+ros2 launch jgarm_bringup sim.launch.py viewer:=false
+```
+
+The MuJoCo viewer process subscribes to `/joint_states` and updates the
+display continuously without running a second physics simulation.
+
+## Control interfaces
 
 ```text
-/home/hanner/micromamba/envs/mujoco_env/bin/python
-Python 3.10.x
-<empty PYTHONPATH>
+/joint_states                    sensor_msgs/JointState
+/arm/target/joint_position       std_msgs/Float64MultiArray
+/arm/target/pose                 geometry_msgs/PoseStamped
+/arm/control/effort_cmd          std_msgs/Float64MultiArray
+/arm/sim/reset                   std_srvs/Trigger
 ```
 
-## Prepare assets
-
-The CAD-exported STL files remain unchanged. Generate simplified visual
-meshes and convex collision meshes with:
+Move to a joint target:
 
 ```bash
-python scripts/prepare_meshes.py --force
+ros2 topic pub --once /arm/target/joint_position \
+  std_msgs/msg/Float64MultiArray \
+  "{data: [0.1, -0.8, 0.8, 0.1, 0.3, -0.1]}"
 ```
 
-## Inspect the model
+The pose target frame is `base_link`. The Python controller uses
+`kdl_parser_py` and KDL numerical IK, then PD plus Pinocchio gravity
+compensation.
+
+Publish a TCP target while preserving the current TCP orientation:
 
 ```bash
-python scripts/view_model.py
+python3 scripts/ros2_send_pose_target.py \
+  --x 0.25 --y 0.05 --z 0.42
 ```
 
-Advance physics with zero actuator torque:
+## Tests
+
+Build test:
 
 ```bash
-python scripts/view_model.py --physics
+source scripts/activate_ros2_env.sh
+cd ros2_ws
+colcon test
+colcon test-result --verbose
 ```
 
-## Run tests
+Legacy Python algorithm regression tests are still available through the
+Python 3.10 environment:
 
 ```bash
+source scripts/activate_env.sh
 ./scripts/run_tests.sh -q
 ```
 
-The test wrapper disables pytest plugin auto-discovery so ROS Jazzy pytest
-plugins cannot be loaded by the Python 3.10 MuJoCo environment.
-
-Running pytest directly is also supported after activating the environment:
-
-```bash
-python -m pytest -q
-```
-
-## Kinematics and control
-
-The Python package provides:
-
-```text
-Kinematics              KDL FK, Jacobian, and numerical IK
-PinocchioDynamics       fixed-base generalized gravity
-PDGravityController     joint PD plus gravity feedforward
-```
-
-Solve and display an IK target:
-
-```bash
-python scripts/demo_ik.py --x 0.50 --y 0.00 --z 0.50
-```
-
-Run joint PD control with Pinocchio gravity compensation:
-
-```bash
-python scripts/demo_pd_gravity.py \
-  --target 0.1,-0.8,0.8,0.1,0.3,-0.1
-```
-
-## Use the Python API
-
-The test and viewer entry points configure the source path themselves. For
-an interactive control script, run it from the project root with:
-
-```bash
-PYTHONPATH=src python your_controller.py
-```
-
-Joint order is fixed to `joint_1` through `joint_6`. The hardware boundary
-uses radians, radians per second, newton-metres, and seconds.
+The ROS 2 runtime does not use the micromamba environment.

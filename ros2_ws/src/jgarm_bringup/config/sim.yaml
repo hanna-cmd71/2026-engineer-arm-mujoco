@@ -1,0 +1,5 @@
+mujoco_sim_node:
+  ros__parameters:
+    cycle_us: 1000
+    state_publish_divider: 2
+    command_timeout_s: 0.1
