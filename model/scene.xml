@@ -1,0 +1,3 @@
+<mujoco model="jgarm_scene">
+  <include file="jgarm.xml"/>
+</mujoco>

@@ -1,0 +1,316 @@
+<!--
+  JGarm robot, default scene, actuators, and sensors. scene.xml includes this
+  file so that the robot model can later be reused in task-specific scenes.
+-->
+<mujoco model="jgarm">
+<compiler
+  angle="radian"
+  autolimits="true"
+  fusestatic="false"
+  meshdir="assets"/>
+
+<option
+  timestep="0.001"
+  integrator="implicitfast"
+  gravity="0 0 -9.81"/>
+
+<visual>
+  <global offwidth="1280" offheight="960"/>
+  <quality shadowsize="4096"/>
+  <headlight
+    ambient="0.35 0.35 0.35"
+    diffuse="0.55 0.55 0.55"/>
+</visual>
+
+<default>
+  <default class="visual">
+    <geom
+      contype="0"
+      conaffinity="0"
+      group="2"
+      rgba="0.72 0.75 0.78 1"
+      material="metal"/>
+  </default>
+  <default class="collision">
+    <geom
+      contype="1"
+      conaffinity="1"
+      condim="3"
+      group="3"
+      rgba="0.15 0.55 0.85 0.18"
+      friction="0.8 0.02 0.01"/>
+  </default>
+  <default class="arm_joint">
+    <joint
+      type="hinge"
+      damping="0.05"
+      armature="0.001"/>
+  </default>
+</default>
+
+<asset>
+  <material
+    name="metal"
+    specular="0.55"
+    shininess="0.35"
+    rgba="0.72 0.75 0.78 1"/>
+  <mesh name="base_link_visual" file="visual/base_link.stl"/>
+  <mesh name="link1_visual" file="visual/link1.stl"/>
+  <mesh name="link2_visual" file="visual/link2.stl"/>
+  <mesh name="link3_visual" file="visual/link3.stl"/>
+  <mesh name="link4_visual" file="visual/link4.stl"/>
+  <mesh name="link5_visual" file="visual/link5.stl"/>
+  <mesh name="link6_visual" file="visual/link6.stl"/>
+  <mesh name="base_link_collision" file="collision/base_link.stl"/>
+  <mesh name="link1_collision" file="collision/link1.stl"/>
+  <mesh name="link2_collision" file="collision/link2.stl"/>
+  <mesh name="link3_collision" file="collision/link3.stl"/>
+  <mesh name="link4_collision" file="collision/link4.stl"/>
+  <mesh name="link5_collision" file="collision/link5.stl"/>
+  <mesh name="link6_collision" file="collision/link6.stl"/>
+</asset>
+
+<worldbody>
+  <light
+    name="key_light"
+    pos="1.2 -1.2 2.0"
+    dir="-0.5 0.5 -1"
+    directional="true"
+    castshadow="true"/>
+  <geom
+    name="floor"
+    type="plane"
+    pos="0 0 -0.105"
+    size="2 2 0.05"
+    rgba="0.32 0.34 0.37 1"
+    friction="1.0 0.01 0.001"/>
+
+<body name="base_link">
+  <!-- The CAD export omits base inertia. The base is fixed, so this fallback
+       only keeps a valid named body in the model hierarchy. -->
+  <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
+  <geom
+    class="visual"
+    type="mesh"
+    mesh="base_link_visual"/>
+  <geom
+    class="collision"
+    type="mesh"
+    mesh="base_link_collision"/>
+
+  <body name="link_1" pos="0 0 0">
+    <inertial
+      pos="0.025292 -0.0021277 0.053006"
+      mass="0.60157"
+      fullinertia="0.00026656 0.00051808 0.00031387 1.0447e-06 -9.6608e-06 4.5373e-07"/>
+    <joint
+      class="arm_joint"
+      name="joint_1"
+      axis="0 0 1"
+      range="-3.14 3.14"
+      frictionloss="0.3"/>
+    <geom
+      class="visual"
+      type="mesh"
+      mesh="link1_visual"/>
+    <geom
+      class="collision"
+      type="mesh"
+      mesh="link1_collision"/>
+
+    <body
+      name="link_2"
+      pos="0.03 0.05 0.06"
+      quat="2.5973434669646147e-06 2.5973530075574152e-06 0.7071080798547034 0.707105482506466">
+      <inertial
+        pos="-0.00027428 0.19656 0.0094203"
+        mass="0.24857"
+        fullinertia="0.0035485 0.00012764 0.0036258 6.4606e-08 -1.1586e-08 2.8277e-08"/>
+      <joint
+        class="arm_joint"
+        name="joint_2"
+        axis="0 0 1"
+        range="-1.3265 1.9024"
+        frictionloss="0.5"/>
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="link2_visual"/>
+      <geom
+        class="collision"
+        type="mesh"
+        mesh="link2_collision"/>
+
+      <body
+        name="link_3"
+        pos="0 0.38 0"
+        quat="0.7071054825112362 0 0 0.7071080798594735">
+        <inertial
+          pos="-0.0012755 0.043295 -0.053823"
+          mass="0.89087"
+          fullinertia="0.00055376 0.00043809 0.00074817 9.9607e-07 2.2349e-06 -5.2207e-06"/>
+        <joint
+          class="arm_joint"
+          name="joint_3"
+          axis="0 0 1"
+          range="-0.5934 1.3500"
+          frictionloss="0.2"/>
+        <geom
+          class="visual"
+          type="mesh"
+          mesh="link3_visual"/>
+        <geom
+          class="collision"
+          type="mesh"
+          mesh="link3_collision"/>
+
+        <body
+          name="link_4"
+          pos="-0.005 0.1535 -0.05"
+          quat="0.7071080798594735 -0.7071054825112363 0 0">
+          <inertial
+            pos="1.1848e-05 0.002584 0.055104"
+            mass="0.34032"
+            fullinertia="0.00024293 0.0002931 0.0001102 2.0109e-08 2.3583e-08 3.3767e-08"/>
+          <joint
+            class="arm_joint"
+            name="joint_4"
+            axis="0 0 1"
+            range="-3.14 3.14"
+            frictionloss="0.2"/>
+          <geom
+            class="visual"
+            type="mesh"
+            mesh="link4_visual"/>
+          <geom
+            class="collision"
+            type="mesh"
+            mesh="link4_collision"/>
+
+          <body
+            name="link_5"
+            pos="0 0 0.136"
+            quat="0.7071080798594735 0.7071054825112363 0 0">
+            <inertial
+              pos="6.0551e-05 -0.025037 3.7661e-05"
+              mass="0.11997"
+              fullinertia="3.9963e-05 5.5683e-05 3.4447e-05 3.4339e-08 -9.6217e-10 1.916e-08"/>
+            <joint
+              class="arm_joint"
+              name="joint_5"
+              axis="0 0 -1"
+              range="-2.094395 2.094395"
+              frictionloss="0.2"/>
+            <geom
+              class="visual"
+              type="mesh"
+              mesh="link5_visual"/>
+            <geom
+              class="collision"
+              type="mesh"
+              mesh="link5_collision"/>
+
+            <body
+              name="link_6"
+              pos="0 0.1685 0"
+              quat="0.7071080798594735 0.7071054825112363 0 0">
+              <inertial
+                pos="-3.2784e-07 0.00091477 0.067918"
+                mass="0.56394"
+                fullinertia="0.00054515 0.0003323 0.00048531 1.1364e-07 -5.2571e-10 -4.4562e-08"/>
+              <joint
+                class="arm_joint"
+                name="joint_6"
+                axis="0 0 -1"
+                range="-3.14 3.14"
+                frictionloss="0.2"/>
+              <geom
+                class="visual"
+                type="mesh"
+                mesh="link6_visual"/>
+              <geom
+                class="collision"
+                type="mesh"
+                mesh="link6_collision"/>
+
+              <!-- The CAD URDF has no tool flange or gripper. The site marks
+                   the link_6 origin until the final TCP is defined. -->
+              <site
+                name="tcp"
+                pos="0 0 0"
+                size="0.01"
+                rgba="1 0.2 0.2 1"/>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </body>
+</body>
+
+</worldbody>
+
+<contact>
+  <exclude body1="base_link" body2="link_1"/>
+  <exclude body1="link_1" body2="link_2"/>
+  <exclude body1="link_2" body2="link_3"/>
+  <exclude body1="link_3" body2="link_4"/>
+  <exclude body1="link_4" body2="link_5"/>
+  <exclude body1="link_5" body2="link_6"/>
+</contact>
+
+<actuator>
+  <motor
+    name="joint_1_motor"
+    joint="joint_1"
+    ctrllimited="true"
+    ctrlrange="-25 25"/>
+  <motor
+    name="joint_2_motor"
+    joint="joint_2"
+    ctrllimited="true"
+    ctrlrange="-63 63"/>
+  <motor
+    name="joint_3_motor"
+    joint="joint_3"
+    ctrllimited="true"
+    ctrlrange="-35 35"/>
+  <motor
+    name="joint_4_motor"
+    joint="joint_4"
+    ctrllimited="true"
+    ctrlrange="-18 18"/>
+  <motor
+    name="joint_5_motor"
+    joint="joint_5"
+    ctrllimited="true"
+    ctrlrange="-6 6"/>
+  <motor
+    name="joint_6_motor"
+    joint="joint_6"
+    ctrllimited="true"
+    ctrlrange="-3 3"/>
+</actuator>
+
+<sensor>
+  <jointpos joint="joint_1"/>
+  <jointpos joint="joint_2"/>
+  <jointpos joint="joint_3"/>
+  <jointpos joint="joint_4"/>
+  <jointpos joint="joint_5"/>
+  <jointpos joint="joint_6"/>
+  <jointvel joint="joint_1"/>
+  <jointvel joint="joint_2"/>
+  <jointvel joint="joint_3"/>
+  <jointvel joint="joint_4"/>
+  <jointvel joint="joint_5"/>
+  <jointvel joint="joint_6"/>
+  <actuatorfrc actuator="joint_1_motor"/>
+  <actuatorfrc actuator="joint_2_motor"/>
+  <actuatorfrc actuator="joint_3_motor"/>
+  <actuatorfrc actuator="joint_4_motor"/>
+  <actuatorfrc actuator="joint_5_motor"/>
+  <actuatorfrc actuator="joint_6_motor"/>
+  <framepos objtype="site" objname="tcp"/>
+</sensor>
+</mujoco>
