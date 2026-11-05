@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 import mujoco
+from mujoco import viewer as mujoco_viewer
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +49,7 @@ def main() -> None:
     start_time = time.monotonic()
     last_render_time = start_time
 
-    with mujoco.viewer.launch_passive(backend.model, backend.data) as viewer:
+    with mujoco_viewer.launch_passive(backend.model, backend.data) as viewer:
         viewer.cam.distance = 1.2
         viewer.cam.azimuth = 135.0
         viewer.cam.elevation = -20.0
