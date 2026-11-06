@@ -182,7 +182,7 @@ class ArmControlNode(Node):
         ]
         result = self.kinematics.inverse(
             target,
-            self._current_position,
+            self._target_position,
             IKOptions(max_attempts=5),
         )
         if result.success:

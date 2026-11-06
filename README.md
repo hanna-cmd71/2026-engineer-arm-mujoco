@@ -17,6 +17,16 @@ Python 3.12 jgarm_control
   Pinocchio generalized gravity
   PD gravity feedforward controller
   MuJoCo passive viewer driven by /joint_states
+
+MoveIt 2
+  KDL kinematics plugin
+  OMPL RRT-Connect/RRT* planning
+  FollowJointTrajectory action
+
+Python 3.12 trajectory bridge
+  cubic Hermite interpolation
+  position and velocity reference publishing
+  goal tolerance and completion checks
 ```
 
 The C++ node owns physics. The Python nodes never advance the dynamic model;
@@ -92,13 +102,21 @@ display continuously without running a second physics simulation.
 /arm/sim/reset                   std_srvs/Trigger
 ```
 
-Move to a joint target:
+Move to a joint target through MoveIt planning and trajectory execution:
 
 ```bash
-ros2 topic pub --once /arm/target/joint_position \
-  std_msgs/msg/Float64MultiArray \
-  "{data: [0.1, -0.8, 0.8, 0.1, 0.3, -0.1]}"
+python3 scripts/ros2_moveit_joint_goal.py \
+  --target 0.1,-0.8,0.8,0.1,0.3,-0.1
 ```
+
+The MoveIt client waits until the robot is stationary before planning, so a
+new command does not start from a stale or moving state. The trajectory
+bridge publishes position and velocity references together at 200 Hz, avoiding
+position-only target jumps.
+
+`/arm/target/joint_position` remains available for low-level debugging, but
+directly publishing to it bypasses MoveIt planning and should not be used for
+normal motion tests.
 
 The pose target frame is `base_link`. The Python controller uses
 `kdl_parser_py` and KDL numerical IK, then PD plus Pinocchio gravity
@@ -111,11 +129,11 @@ python3 scripts/ros2_send_pose_target.py \
   --x 0.25 --y 0.05 --z 0.42
 ```
 
-Plan and execute a joint goal through MoveIt 2 OMPL:
+Plan and execute another joint goal:
 
 ```bash
 python3 scripts/ros2_moveit_joint_goal.py \
-  --target 0.1,-0.8,0.8,0.1,0.3,-0.1
+  --target 0.2,-0.7,0.7,0.1,0.4,-0.1
 ```
 
 ## Tests

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import time
 
 import numpy as np
 import rclpy
@@ -14,6 +15,8 @@ from moveit_msgs.msg import (
     PlanningOptions,
 )
 from rclpy.action import ActionClient
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import JointState
 
 from jgarm_control.types import JOINT_NAMES
 
@@ -40,6 +43,41 @@ def main() -> None:
     client = ActionClient(node, MoveGroup, "/move_action")
     if not client.wait_for_server(timeout_sec=10.0):
         raise RuntimeError("/move_action is unavailable")
+
+    state_holder = {}
+
+    def state_callback(message: JointState) -> None:
+        state_holder["state"] = message
+        state_holder["time"] = time.monotonic()
+
+    state_qos = QoSProfile(
+        depth=10, reliability=ReliabilityPolicy.RELIABLE
+    )
+    node.create_subscription(
+        JointState, "/joint_states", state_callback, state_qos
+    )
+    stable_since = None
+    deadline = time.monotonic() + 10.0
+    while rclpy.ok() and time.monotonic() < deadline:
+        rclpy.spin_once(node, timeout_sec=0.05)
+        message = state_holder.get("state")
+        fresh = (
+            message is not None
+            and time.monotonic() - state_holder.get("time", 0.0) < 0.2
+        )
+        stable = (
+            fresh
+            and message.velocity
+            and max(abs(value) for value in message.velocity) < 0.01
+        )
+        if stable and stable_since is None:
+            stable_since = time.monotonic()
+        elif not stable:
+            stable_since = None
+        if stable_since is not None and time.monotonic() - stable_since >= 0.5:
+            break
+    else:
+        raise RuntimeError("Robot did not settle before MoveIt planning")
 
     constraints = Constraints()
     for name, position in zip(JOINT_NAMES, target):

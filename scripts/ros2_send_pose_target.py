@@ -86,20 +86,24 @@ def main() -> None:
     qx, qy, qz, qw = rotation_to_quaternion(target[:3, :3])
 
     publisher = node.create_publisher(PoseStamped, "/arm/target/pose", 10)
-    time.sleep(0.5)
-    for _ in range(20):
-        message = PoseStamped()
-        message.header.stamp = node.get_clock().now().to_msg()
-        message.header.frame_id = "base_link"
-        message.pose.position.x = args.x
-        message.pose.position.y = args.y
-        message.pose.position.z = args.z
-        message.pose.orientation.x = qx
-        message.pose.orientation.y = qy
-        message.pose.orientation.z = qz
-        message.pose.orientation.w = qw
-        publisher.publish(message)
-        time.sleep(0.05)
+    deadline = time.monotonic() + 5.0
+    while publisher.get_subscription_count() == 0 and rclpy.ok():
+        if time.monotonic() >= deadline:
+            raise RuntimeError("No subscriber found on /arm/target/pose")
+        rclpy.spin_once(node, timeout_sec=0.1)
+
+    message = PoseStamped()
+    message.header.stamp = node.get_clock().now().to_msg()
+    message.header.frame_id = "base_link"
+    message.pose.position.x = args.x
+    message.pose.position.y = args.y
+    message.pose.position.z = args.z
+    message.pose.orientation.x = qx
+    message.pose.orientation.y = qy
+    message.pose.orientation.z = qz
+    message.pose.orientation.w = qw
+    publisher.publish(message)
+    time.sleep(0.2)
 
     print(f"Published TCP target: {position.tolist()}")
     node.destroy_node()
