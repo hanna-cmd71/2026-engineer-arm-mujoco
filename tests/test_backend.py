@@ -12,7 +12,9 @@ from jgarm_sim import MuJoCoArmBackend, TorqueCommand
 def test_each_joint_responds_to_its_torque_command(joint_index: int) -> None:
     backend = MuJoCoArmBackend()
     backend.model.opt.gravity[:] = 0.0
-    backend.reset()
+    backend.model.geom_contype[:] = 0
+    backend.model.geom_conaffinity[:] = 0
+    backend.reset(np.zeros(6))
 
     command = np.zeros(6)
     command[joint_index] = 1.0

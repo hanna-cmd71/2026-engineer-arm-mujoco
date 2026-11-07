@@ -1,0 +1,49 @@
+# Hardware model extracted from reATRM's Engineer layer.
+# J2/J3 are LK MF7015 with 50:1 reduction. The driver's max_torque=16 N*m
+# is a reference value and is not enforced, so the URDF effort limit remains.
+/**:
+  ros__parameters:
+    hardware_profile.id: "reatrm_engineer"
+    hardware_profile.motor_types:
+      ["DM4310", "LK_MF7015", "LK_MF7015", "DM4310", "DM4310", "DM4310"]
+    hardware_profile.joint_gear_ratio: [1.0, 50.0, 50.0, 1.0, 1.5, 1.0]
+    hardware_profile.effort_limits_nm: [10.0, 63.0, 35.0, 10.0, 6.0, 3.0]
+    hardware_profile.command_rate_hz: 500.0
+    hardware_profile.state_rate_hz: 111.111111
+    # Not identified in reATRM. Retain the previous simulator value so the
+    # 1 ms rigid-body integration remains stable until a real test identifies it.
+    hardware_profile.joint_viscous_damping_nm_s_rad:
+      [0.05, 0.05, 0.05, 0.5, 0.5, 0.5]
+    hardware_profile.joint_armature_kg_m2:
+      [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
+    # Not identified in reATRM. Represents the motor current-loop response and
+    # prevents the Python/DDS control boundary from seeing an ideal torque source.
+    hardware_profile.actuator_time_constant_s:
+      [0.005, 0.005, 0.005, 0.005, 0.005, 0.005]
+    hardware_profile.gravity_j5_config_weight: 0.35
+    # reATRM's J5 q2-coupling is an empirical control fit, not a conservative
+    # physical force field. Project it to a passive form for MuJoCo dynamics.
+    hardware_profile.gravity_j5_conservative_coupling: true
+    hardware_profile.gravity_p_nm:
+      [0.0, 20.284, -15.112, -0.579, 16.368, 0.0]
+    hardware_profile.gravity_q_nm:
+      [0.0, -60.824, 2.680, 0.380, -0.715, 0.0]
+    hardware_profile.gravity_bias_nm:
+      [0.0, -22.244, 1.534, 0.0, -13.608, 0.0]
+    hardware_profile.friction_torque_nm:
+      [0.0, 11.6, 7.4, 0.0, 0.75, 0.0]
+    hardware_profile.friction_velocity_scale_rad_s:
+      [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+    hardware_profile.breakaway_torque_nm:
+      [0.0, 11.25, 10.0, 0.0, 0.4, 0.2]
+    hardware_profile.breakaway_error_scale_rad: 0.01
+    hardware_profile.breakaway_target_velocity_threshold_rad_s: 0.02
+    hardware_profile.breakaway_actual_velocity_threshold_rad_s: 0.03
+    hardware_profile.plant_breakaway_velocity_scale_rad_s: 0.02
+    # MuJoCo must retain its 9.81 m/s^2 world gravity. False disables the
+    # empirical plant-force injection used by the original hardware model.
+    hardware_profile.plant_gravity_enabled: false
+    hardware_profile.plant_friction_enabled: true
+    # Breakaway is a controller compensation term, not a smooth passive damper.
+    # Applying it to the plant at 0.02 rad/s creates numerical chatter at 1 kHz.
+    hardware_profile.plant_breakaway_enabled: false

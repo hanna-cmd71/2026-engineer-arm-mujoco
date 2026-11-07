@@ -9,6 +9,8 @@ import numpy as np
 
 JOINT_NAMES = tuple(f"joint_{index}" for index in range(1, 7))
 JOINT_COUNT = len(JOINT_NAMES)
+POWER_ON_POSITION_RAD = (0.0, -1.3265, 1.35, 0.0, 0.0, 0.0)
+URDF_ZERO_POSITION_RAD = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 
 def vector6(values, name: str) -> np.ndarray:

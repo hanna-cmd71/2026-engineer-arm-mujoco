@@ -43,7 +43,7 @@
   <default class="arm_joint">
     <joint
       type="hinge"
-      damping="0.05"
+      damping="0.0"
       armature="0.001"/>
   </default>
 </default>
@@ -81,11 +81,76 @@
     name="floor"
     type="plane"
     pos="0 0 -0.105"
-    size="2 2 0.05"
+    size="5 5 0.05"
     rgba="0.32 0.34 0.37 1"
     friction="1.0 0.01 0.001"/>
 
-<body name="base_link">
+<body
+  name="mobile_base"
+  pos="-0.20985272 0 0">
+  <joint name="base_x" type="slide" axis="1 0 0" damping="0.1"/>
+  <joint name="base_y" type="slide" axis="0 1 0" damping="0.1"/>
+  <joint name="base_yaw" type="hinge" axis="0 0 1" damping="0.5"/>
+  <inertial
+    pos="0 0 -0.02"
+    mass="8.0"
+    diaginertia="0.16 0.16 0.22"/>
+  <geom
+    name="mobile_base_chassis"
+    type="box"
+    pos="0 0 -0.025"
+    size="0.22 0.18 0.035"
+    rgba="0.16 0.18 0.22 1"
+    friction="0.8 0.01 0.001"/>
+
+  <body name="wheel_front_left" pos="0.18 0.15 -0.06">
+    <joint name="wheel_front_left_spin" type="hinge" axis="0 1 0"/>
+    <inertial pos="0 0 0" mass="0.3" diaginertia="0.0003 0.0003 0.0003"/>
+    <geom
+      name="wheel_front_left_geom"
+      type="cylinder"
+      euler="1.5708 0 0"
+      size="0.045 0.02"
+      rgba="0.04 0.04 0.04 1"
+      friction="1.1 0.02 0.001"/>
+  </body>
+  <body name="wheel_front_right" pos="0.18 -0.15 -0.06">
+    <joint name="wheel_front_right_spin" type="hinge" axis="0 1 0"/>
+    <inertial pos="0 0 0" mass="0.3" diaginertia="0.0003 0.0003 0.0003"/>
+    <geom
+      name="wheel_front_right_geom"
+      type="cylinder"
+      euler="1.5708 0 0"
+      size="0.045 0.02"
+      rgba="0.04 0.04 0.04 1"
+      friction="1.1 0.02 0.001"/>
+  </body>
+  <body name="wheel_rear_left" pos="-0.18 0.15 -0.06">
+    <joint name="wheel_rear_left_spin" type="hinge" axis="0 1 0"/>
+    <inertial pos="0 0 0" mass="0.3" diaginertia="0.0003 0.0003 0.0003"/>
+    <geom
+      name="wheel_rear_left_geom"
+      type="cylinder"
+      euler="1.5708 0 0"
+      size="0.045 0.02"
+      rgba="0.04 0.04 0.04 1"
+      friction="1.1 0.02 0.001"/>
+  </body>
+  <body name="wheel_rear_right" pos="-0.18 -0.15 -0.06">
+    <joint name="wheel_rear_right_spin" type="hinge" axis="0 1 0"/>
+    <inertial pos="0 0 0" mass="0.3" diaginertia="0.0003 0.0003 0.0003"/>
+    <geom
+      name="wheel_rear_right_geom"
+      type="cylinder"
+      euler="1.5708 0 0"
+      size="0.045 0.02"
+      rgba="0.04 0.04 0.04 1"
+      friction="1.1 0.02 0.001"/>
+  </body>
+
+<body
+  name="base_link"
+  pos="0 0 0.097">
   <!-- The CAD export omits base inertia. The base is fixed, so this fallback
        only keeps a valid named body in the model hierarchy. -->
   <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01"/>
@@ -107,8 +172,7 @@
       class="arm_joint"
       name="joint_1"
       axis="0 0 1"
-      range="-3.14 3.14"
-      frictionloss="0.3"/>
+      range="-3.14 3.14"/>
     <geom
       class="visual"
       type="mesh"
@@ -130,8 +194,7 @@
         class="arm_joint"
         name="joint_2"
         axis="0 0 1"
-        range="-1.3265 1.9024"
-        frictionloss="0.5"/>
+        range="-1.3265 1.9024"/>
       <geom
         class="visual"
         type="mesh"
@@ -153,8 +216,7 @@
           class="arm_joint"
           name="joint_3"
           axis="0 0 1"
-          range="-0.5934 1.3500"
-          frictionloss="0.2"/>
+          range="-0.5934 1.3500"/>
         <geom
           class="visual"
           type="mesh"
@@ -176,8 +238,7 @@
             class="arm_joint"
             name="joint_4"
             axis="0 0 1"
-            range="-3.14 3.14"
-            frictionloss="0.2"/>
+            range="-3.14 3.14"/>
           <geom
             class="visual"
             type="mesh"
@@ -199,8 +260,7 @@
               class="arm_joint"
               name="joint_5"
               axis="0 0 -1"
-              range="-2.094395 2.094395"
-              frictionloss="0.2"/>
+              range="-2.094395 2.094395"/>
             <geom
               class="visual"
               type="mesh"
@@ -222,8 +282,7 @@
                 class="arm_joint"
                 name="joint_6"
                 axis="0 0 -1"
-                range="-3.14 3.14"
-                frictionloss="0.2"/>
+                range="-3.14 3.14"/>
               <geom
                 class="visual"
                 type="mesh"
@@ -245,6 +304,7 @@
         </body>
       </body>
     </body>
+  </body>
   </body>
 </body>
 

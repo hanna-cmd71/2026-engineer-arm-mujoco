@@ -6,9 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 if(DEFINED ENV{MUJOCO_ROOT} AND NOT "$ENV{MUJOCO_ROOT}" STREQUAL "")
   set(_jgarm_default_mujoco_root "$ENV{MUJOCO_ROOT}")
@@ -42,9 +45,12 @@ set_target_properties(
 ament_target_dependencies(
   mujoco_sim_node
   rclcpp
+  geometry_msgs
+  nav_msgs
   sensor_msgs
   std_msgs
-  std_srvs)
+  std_srvs
+  tf2_ros)
 
 install(TARGETS mujoco_sim_node DESTINATION lib/${PROJECT_NAME})
 ament_package()

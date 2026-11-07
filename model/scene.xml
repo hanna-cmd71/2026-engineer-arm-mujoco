@@ -1,3 +1,644 @@
 <mujoco model="jgarm_scene">
   <include file="jgarm.xml"/>
+  <include file="energy_storage_collision.xml"/>
+
+  <default>
+    <default class="debug_axis">
+      <geom
+        type="cylinder"
+        contype="0"
+        conaffinity="0"
+        group="5"
+        size="0.0012 0.025"/>
+    </default>
+  </default>
+
+  <asset>
+    <material
+      name="exchange_core_material"
+      rgba="0.22 0.43 0.50 1"
+      specular="0.35"
+      shininess="0.25"/>
+    <material
+      name="energy_storage_material"
+      rgba="0.58 0.43 0.20 1"
+      specular="0.25"
+      shininess="0.18"/>
+    <material
+      name="energy_unit_material"
+      rgba="0.05 0.72 0.92 1"
+      specular="0.65"
+      shininess="0.45"/>
+    <material
+      name="exchange_cylinder_material"
+      rgba="1.0 0.16 0.04 1"
+      specular="0.7"
+      shininess="0.6"
+      emission="0.08"/>
+    <material
+      name="storage_cylinder_material"
+      rgba="1.0 0.70 0.05 1"
+      specular="0.65"
+      shininess="0.5"
+      emission="0.08"/>
+    <mesh
+      name="exchange_core_visual"
+      file="scene/visual/exchange_core.stl"/>
+    <mesh
+      name="exchange_core_collision"
+      file="scene/collision/exchange_core.stl"/>
+    <mesh
+      name="exchange_cylinder_visual"
+      file="scene/visual/exchange_cylinder.stl"/>
+    <mesh
+      name="exchange_cylinder_collision"
+      file="scene/collision/exchange_cylinder.stl"/>
+    <mesh
+      name="energy_storage_cylinder_01_visual"
+      file="scene/visual/energy_storage_cylinder_01.stl"/>
+    <mesh
+      name="energy_storage_cylinder_01_collision"
+      file="scene/collision/energy_storage_cylinder_01.stl"/>
+    <mesh
+      name="energy_storage_cylinder_02_visual"
+      file="scene/visual/energy_storage_cylinder_02.stl"/>
+    <mesh
+      name="energy_storage_cylinder_02_collision"
+      file="scene/collision/energy_storage_cylinder_02.stl"/>
+    <mesh
+      name="energy_storage_cylinder_03_visual"
+      file="scene/visual/energy_storage_cylinder_03.stl"/>
+    <mesh
+      name="energy_storage_cylinder_03_collision"
+      file="scene/collision/energy_storage_cylinder_03.stl"/>
+    <mesh
+      name="energy_storage_cylinder_04_visual"
+      file="scene/visual/energy_storage_cylinder_04.stl"/>
+    <mesh
+      name="energy_storage_cylinder_04_collision"
+      file="scene/collision/energy_storage_cylinder_04.stl"/>
+    <mesh
+      name="energy_storage_cylinder_05_visual"
+      file="scene/visual/energy_storage_cylinder_05.stl"/>
+    <mesh
+      name="energy_storage_cylinder_05_collision"
+      file="scene/collision/energy_storage_cylinder_05.stl"/>
+    <mesh
+      name="energy_storage_cylinder_06_visual"
+      file="scene/visual/energy_storage_cylinder_06.stl"/>
+    <mesh
+      name="energy_storage_cylinder_06_collision"
+      file="scene/collision/energy_storage_cylinder_06.stl"/>
+    <mesh
+      name="energy_storage_visual"
+      file="scene/visual/energy_storage.stl"/>
+    <mesh
+      name="energy_unit_visual"
+      file="scene/visual/energy_unit.stl"/>
+    <mesh
+      name="energy_unit_collision"
+      file="scene/collision/energy_unit.stl"/>
+  </asset>
+
+  <worldbody>
+    <light
+      name="scene_fill_light"
+      pos="-1.2 1.6 1.8"
+      dir="0.6 -0.5 -1"
+      directional="true"
+      diffuse="0.25 0.25 0.25"/>
+
+    <body name="debug_axes_world">
+      <geom class="debug_axis" name="world_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="world_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="world_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+
+    <!-- The SolidWorks export already uses Z-up and places the core's base at
+         local z=0. Keep that origin unchanged and only apply the scene
+         placement so the core does not get a second axis conversion. -->
+    <body
+      name="exchange_core"
+      pos="0.30 -0.70 -0.064"
+      euler="0 0 1.5708">
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="exchange_core_visual"
+        material="exchange_core_material"
+        rgba="0.22 0.43 0.50 1"/>
+      <geom
+        class="collision"
+        type="mesh"
+        mesh="exchange_core_collision"/>
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="exchange_cylinder_visual"
+        material="exchange_cylinder_material"
+        rgba="1.0 0.16 0.04 1"/>
+      <geom
+        class="collision"
+        name="exchange_cylinder_shell"
+        type="mesh"
+        mesh="exchange_cylinder_collision"/>
+      <site
+        name="exchange_cylinder_marker"
+        pos="0.62000573 -0.6122109 0.75221133"
+        size="0.025"
+        rgba="1.0 0.16 0.04 0.9"/>
+      <site
+        name="energy_unit_install_target"
+        pos="0.67067391 -0.6122109 0.75221133"
+        quat="0.70710678 0 0.70710678 0"
+        size="0.03"
+        rgba="0.1 1.0 0.2 0.9"/>
+      <site
+        name="assembly_post_front_E"
+        pos="0.67067391 -0.6122109 0.75221133"
+        size="0.022"
+        rgba="0.1 1.0 0.2 0.9"/>
+      <body name="debug_axes_assembly_E"
+            pos="0.67067391 -0.6122109 0.75221133">
+        <geom class="debug_axis" name="assembly_E_axis_x"
+              pos="0.025 0 0" euler="0 1.5708 0"
+              rgba="1 0.12 0.08 1"/>
+        <geom class="debug_axis" name="assembly_E_axis_y"
+              pos="0 0.025 0" euler="-1.5708 0 0"
+              rgba="0.1 1 0.15 1"/>
+        <geom class="debug_axis" name="assembly_E_axis_z"
+              pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+        <geom class="debug_axis" name="assembly_insert_axis_minus_x"
+              pos="-0.025 0 0" euler="0 1.5708 0"
+              rgba="1 0.65 0.05 1"/>
+        <geom name="assembly_insert_arrow_tip"
+              type="sphere"
+              pos="-0.052 0 0"
+              size="0.004"
+              contype="0"
+              conaffinity="0"
+              group="5"
+              rgba="1 0.65 0.05 1"/>
+      </body>
+    </body>
+
+    <!-- The storage mesh is Y-up. Convert it to the scene's Z-up frame and
+         place its lower edge on the existing floor without changing scale. -->
+    <body
+      name="energy_storage"
+      pos="0 0.95 -0.105"
+      quat="0 0 0.70710678 0.70710678">
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_storage_visual"
+        material="energy_storage_material"
+        rgba="0.58 0.43 0.20 1"/>
+    </body>
+
+    <!-- Each placement post has an independent Z-up coordinate frame. -->
+    <body
+      name="storage_post_01"
+      pos="-0.20978354 0.59829424 0.46963592"
+      quat="0.00027270 -0.05962999 0.99822051 0">
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_storage_cylinder_01_visual"
+        material="storage_cylinder_material"
+        rgba="1.0 0.70 0.05 1"/>
+      <geom
+        class="collision"
+        name="storage_post_01_shell"
+        type="mesh"
+        mesh="energy_storage_cylinder_01_collision"
+        contype="2"
+        conaffinity="1"/>
+      <site name="energy_storage_cylinder_01" size="0.018"
+            rgba="1.0 0.70 0.05 0.9"/>
+      <site name="storage_post_01_top" pos="0 0 0.051018"
+            size="0.012" rgba="1.0 0.70 0.05 0.9"/>
+      <geom class="debug_axis" name="storage_post_01_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="storage_post_01_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="storage_post_01_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="storage_post_02"
+      pos="-0.064014 0.59830902 0.51143592"
+      quat="0.49999826 -0.00011232 0.86602640 0">
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_storage_cylinder_02_visual"
+        material="storage_cylinder_material"
+        rgba="1.0 0.70 0.05 1"/>
+      <geom
+        class="collision"
+        name="storage_post_02_shell"
+        type="mesh"
+        mesh="energy_storage_cylinder_02_collision"
+        contype="2"
+        conaffinity="1"/>
+      <site name="energy_storage_cylinder_02" size="0.018"
+            rgba="1.0 0.70 0.05 0.9"/>
+      <site name="storage_post_02_top" pos="0 0 0.011497"
+            size="0.012" rgba="1.0 0.70 0.05 0.9"/>
+      <geom class="debug_axis" name="storage_post_02_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="storage_post_02_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="storage_post_02_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="storage_post_03"
+      pos="-0.35569128 0.59826706 0.51144089"
+      quat="0.50000913 0.00013686 -0.86602012 0">
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_storage_cylinder_03_visual"
+        material="storage_cylinder_material"
+        rgba="1.0 0.70 0.05 1"/>
+      <geom
+        class="collision"
+        name="storage_post_03_shell"
+        type="mesh"
+        mesh="energy_storage_cylinder_03_collision"
+        contype="2"
+        conaffinity="1"/>
+      <site name="energy_storage_cylinder_03" size="0.018"
+            rgba="1.0 0.70 0.05 0.9"/>
+      <site name="storage_post_03_top" pos="0 0 0.011573"
+            size="0.012" rgba="1.0 0.70 0.05 0.9"/>
+      <geom class="debug_axis" name="storage_post_03_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="storage_post_03_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="storage_post_03_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="storage_post_04"
+      pos="-0.06401416 0.59830902 0.67983585"
+      quat="0.86602436 -0.00006485 0.50000181 0">
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_storage_cylinder_04_visual"
+        material="storage_cylinder_material"
+        rgba="1.0 0.70 0.05 1"/>
+      <geom
+        class="collision"
+        name="storage_post_04_shell"
+        type="mesh"
+        mesh="energy_storage_cylinder_04_collision"
+        contype="2"
+        conaffinity="1"/>
+      <site name="energy_storage_cylinder_04" size="0.018"
+            rgba="1.0 0.70 0.05 0.9"/>
+      <site name="storage_post_04_top" pos="0 0 0.011619"
+            size="0.012" rgba="1.0 0.70 0.05 0.9"/>
+      <geom class="debug_axis" name="storage_post_04_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="storage_post_04_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="storage_post_04_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="storage_post_05"
+      pos="-0.35569145 0.59826706 0.67983588"
+      quat="0.86602428 0.00007902 -0.50000195 0">
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_storage_cylinder_05_visual"
+        material="storage_cylinder_material"
+        rgba="1.0 0.70 0.05 1"/>
+      <geom
+        class="collision"
+        name="storage_post_05_shell"
+        type="mesh"
+        mesh="energy_storage_cylinder_05_collision"
+        contype="2"
+        conaffinity="1"/>
+      <site name="energy_storage_cylinder_05" size="0.018"
+            rgba="1.0 0.70 0.05 0.9"/>
+      <site name="storage_post_05_top" pos="0 0 0.011729"
+            size="0.012" rgba="1.0 0.70 0.05 0.9"/>
+      <geom class="debug_axis" name="storage_post_05_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="storage_post_05_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="storage_post_05_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="storage_post_06"
+      pos="-0.20992191 0.59829424 0.7216359"
+      quat="0.99999996 -0.00001640 -0.00027456 0">
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_storage_cylinder_06_visual"
+        material="storage_cylinder_material"
+        rgba="1.0 0.70 0.05 1"/>
+      <geom
+        class="collision"
+        name="storage_post_06_shell"
+        type="mesh"
+        mesh="energy_storage_cylinder_06_collision"
+        contype="2"
+        conaffinity="1"/>
+      <site name="energy_storage_cylinder_06" size="0.018"
+            rgba="1.0 0.70 0.05 0.9"/>
+      <site name="storage_post_06_top" pos="0 0 0.051051"
+            size="0.012" rgba="1.0 0.70 0.05 0.9"/>
+      <geom class="debug_axis" name="storage_post_06_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="storage_post_06_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="storage_post_06_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+
+    <!-- The resource station contains six movable energy units, one on each
+         magnetic placement post. The body origin is the bottom center. -->
+    <body
+      name="energy_unit_01"
+      pos="-0.20979945 0.59829329 0.49861769"
+      quat="0.00027270 -0.05962999 0.99822051 0">
+      <freejoint name="energy_unit_01_free"/>
+      <inertial
+        pos="0 0 0.0789116693050644"
+        mass="0.4"
+        fullinertia="0.001054816217684578 0.001054820645060166 0.0004005465638989923 -6.815787080999529e-10 -1.7769581805685304e-09 -7.807309456562906e-10"/>
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_unit_visual"
+        material="energy_unit_material"
+        rgba="0.05 0.72 0.92 1"/>
+      <geom
+        class="collision"
+        name="energy_unit_01_shell"
+        type="cylinder"
+        pos="0 0 0.075"
+        size="0.0475 0.075"
+        contype="4"
+        conaffinity="5"
+        friction="1.0 0.01 0.001"/>
+      <site name="energy_unit_01_insert_depth" pos="0 0 0.08"
+            size="0.008" rgba="0.1 1.0 0.2 0.9"/>
+      <geom class="debug_axis" name="energy_unit_01_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="energy_unit_01_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="energy_unit_01_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="energy_unit_02"
+      pos="-0.12333919 0.59830133 0.54568765"
+      quat="0.49999826 -0.00011232 0.86602640 0">
+      <freejoint name="energy_unit_02_free"/>
+      <inertial
+        pos="0 0 0.0789116693050644"
+        mass="0.4"
+        fullinertia="0.001054816217684578 0.001054820645060166 0.0004005465638989923 -6.815787080999529e-10 -1.7769581805685304e-09 -7.807309456562906e-10"/>
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_unit_visual"
+        material="energy_unit_material"
+        rgba="0.05 0.72 0.92 1"/>
+      <geom
+        class="collision"
+        name="energy_unit_02_shell"
+        type="cylinder"
+        pos="0 0 0.075"
+        size="0.0475 0.075"
+        contype="4"
+        conaffinity="5"
+        friction="1.0 0.01 0.001"/>
+      <site name="energy_unit_02_insert_depth" pos="0 0 0.08"
+            size="0.008" rgba="0.1 1.0 0.2 0.9"/>
+      <geom class="debug_axis" name="energy_unit_02_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="energy_unit_02_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="energy_unit_02_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="energy_unit_03"
+      pos="-0.29643073 0.59827643 0.54565333"
+      quat="0.50000913 0.00013686 -0.86602012 0">
+      <freejoint name="energy_unit_03_free"/>
+      <inertial
+        pos="0 0 0.0789116693050644"
+        mass="0.4"
+        fullinertia="0.001054816217684578 0.001054820645060166 0.0004005465638989923 -6.815787080999529e-10 -1.7769581805685304e-09 -7.807309456562906e-10"/>
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_unit_visual"
+        material="energy_unit_material"
+        rgba="0.05 0.72 0.92 1"/>
+      <geom
+        class="collision"
+        name="energy_unit_03_shell"
+        type="cylinder"
+        pos="0 0 0.075"
+        size="0.0475 0.075"
+        contype="4"
+        conaffinity="5"
+        friction="1.0 0.01 0.001"/>
+      <site name="energy_unit_03_insert_depth" pos="0 0 0.08"
+            size="0.008" rgba="0.1 1.0 0.2 0.9"/>
+      <geom class="debug_axis" name="energy_unit_03_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="energy_unit_03_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="energy_unit_03_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="energy_unit_04"
+      pos="-0.12323391 0.59830134 0.64564564"
+      quat="0.86602436 -0.00006485 0.50000181 0">
+      <freejoint name="energy_unit_04_free"/>
+      <inertial
+        pos="0 0 0.0789116693050644"
+        mass="0.4"
+        fullinertia="0.001054816217684578 0.001054820645060166 0.0004005465638989923 -6.815787080999529e-10 -1.7769581805685304e-09 -7.807309456562906e-10"/>
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_unit_visual"
+        material="energy_unit_material"
+        rgba="0.05 0.72 0.92 1"/>
+      <geom
+        class="collision"
+        name="energy_unit_04_shell"
+        type="cylinder"
+        pos="0 0 0.075"
+        size="0.0475 0.075"
+        contype="4"
+        conaffinity="5"
+        friction="1.0 0.01 0.001"/>
+      <site name="energy_unit_04_insert_depth" pos="0 0 0.08"
+            size="0.008" rgba="0.1 1.0 0.2 0.9"/>
+      <geom class="debug_axis" name="energy_unit_04_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="energy_unit_04_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="energy_unit_04_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="energy_unit_05"
+      pos="-0.29656722 0.59827640 0.64570084"
+      quat="0.86602428 0.00007902 -0.50000195 0">
+      <freejoint name="energy_unit_05_free"/>
+      <inertial
+        pos="0 0 0.0789116693050644"
+        mass="0.4"
+        fullinertia="0.001054816217684578 0.001054820645060166 0.0004005465638989923 -6.815787080999529e-10 -1.7769581805685304e-09 -7.807309456562906e-10"/>
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_unit_visual"
+        material="energy_unit_material"
+        rgba="0.05 0.72 0.92 1"/>
+      <geom
+        class="collision"
+        name="energy_unit_05_shell"
+        type="cylinder"
+        pos="0 0 0.075"
+        size="0.0475 0.075"
+        contype="4"
+        conaffinity="5"
+        friction="1.0 0.01 0.001"/>
+      <site name="energy_unit_05_insert_depth" pos="0 0 0.08"
+            size="0.008" rgba="0.1 1.0 0.2 0.9"/>
+      <geom class="debug_axis" name="energy_unit_05_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="energy_unit_05_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="energy_unit_05_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+    <body
+      name="energy_unit_06"
+      pos="-0.20990602 0.59829329 0.69268737"
+      quat="0.99999996 -0.00001640 -0.00027456 0">
+      <freejoint name="energy_unit_06_free"/>
+      <inertial
+        pos="0 0 0.0789116693050644"
+        mass="0.4"
+        fullinertia="0.001054816217684578 0.001054820645060166 0.0004005465638989923 -6.815787080999529e-10 -1.7769581805685304e-09 -7.807309456562906e-10"/>
+      <geom
+        class="visual"
+        type="mesh"
+        mesh="energy_unit_visual"
+        material="energy_unit_material"
+        rgba="0.05 0.72 0.92 1"/>
+      <geom
+        class="collision"
+        name="energy_unit_06_shell"
+        type="cylinder"
+        pos="0 0 0.075"
+        size="0.0475 0.075"
+        contype="4"
+        conaffinity="5"
+        friction="1.0 0.01 0.001"/>
+      <site name="energy_unit_06_insert_depth" pos="0 0 0.08"
+            size="0.008" rgba="0.1 1.0 0.2 0.9"/>
+      <geom class="debug_axis" name="energy_unit_06_axis_x"
+            pos="0.025 0 0" euler="0 1.5708 0"
+            rgba="1 0.12 0.08 1"/>
+      <geom class="debug_axis" name="energy_unit_06_axis_y"
+            pos="0 0.025 0" euler="-1.5708 0 0"
+            rgba="0.1 1 0.15 1"/>
+      <geom class="debug_axis" name="energy_unit_06_axis_z"
+            pos="0 0 0.025" rgba="0.08 0.25 1 1"/>
+    </body>
+  </worldbody>
+
+  <!-- Rules 4.2.6: the six units are initially held by magnetic attachment.
+       These equality constraints preserve the initial placement. Task logic
+       can disable the corresponding constraint when a robot extracts a unit. -->
+  <equality>
+    <weld name="storage_magnet_01" body1="world" body2="energy_unit_01"/>
+    <weld name="storage_magnet_02" body1="world" body2="energy_unit_02"/>
+    <weld name="storage_magnet_03" body1="world" body2="energy_unit_03"/>
+    <weld name="storage_magnet_04" body1="world" body2="energy_unit_04"/>
+    <weld name="storage_magnet_05" body1="world" body2="energy_unit_05"/>
+    <weld name="storage_magnet_06" body1="world" body2="energy_unit_06"/>
+  </equality>
+
+  <!-- The outer-shell convex hull fills the central cavity where the arm base
+       is intentionally mounted. Keep that cavity non-colliding for the arm
+       while retaining all localized resource-station collision parts. -->
+  <contact>
+    <exclude body1="base_link" body2="energy_storage_outer_hull"/>
+    <exclude body1="link_1" body2="energy_storage_outer_hull"/>
+    <exclude body1="link_2" body2="energy_storage_outer_hull"/>
+    <exclude body1="link_3" body2="energy_storage_outer_hull"/>
+    <exclude body1="link_4" body2="energy_storage_outer_hull"/>
+    <exclude body1="link_5" body2="energy_storage_outer_hull"/>
+    <exclude body1="link_6" body2="energy_storage_outer_hull"/>
+  </contact>
+
+  <keyframe>
+    <key
+      name="power_on"
+      qpos="0 0 0
+            0 0 0 0
+            0 -1.3265 1.35 0 0 0
+            -0.20979945 0.59829329 0.49861769
+             0.00027270 -0.05962999 0.99822051 0
+            -0.12333919 0.59830133 0.54568765
+             0.49999826 -0.00011232 0.86602640 0
+            -0.29643073 0.59827643 0.54565333
+             0.50000913 0.00013686 -0.86602012 0
+            -0.12323391 0.59830134 0.64564564
+             0.86602436 -0.00006485 0.50000181 0
+            -0.29656722 0.59827640 0.64570084
+             0.86602428 0.00007902 -0.50000195 0
+            -0.20990602 0.59829329 0.69268737
+             0.99999996 -0.00001640 -0.00027456 0"/>
+  </keyframe>
 </mujoco>

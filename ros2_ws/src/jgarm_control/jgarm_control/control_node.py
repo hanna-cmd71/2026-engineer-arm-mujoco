@@ -9,15 +9,25 @@ import numpy as np
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
+from std_srvs.srv import SetBool
 
 from jgarm_control.controller import PDGains, PDGravityController
-from jgarm_control.dynamics import PinocchioDynamics
+from jgarm_control.hardware_profile import EngineerHardwareProfile
 from jgarm_control.kinematics import IKOptions, Kinematics
-from jgarm_control.types import JOINT_COUNT, JOINT_NAMES, JointFeedback
+from jgarm_control.types import (
+    JOINT_COUNT,
+    JOINT_NAMES,
+    JointFeedback,
+    POWER_ON_POSITION_RAD,
+    TorqueCommand,
+    vector6,
+)
 
 
 def _quaternion_matrix(x: float, y: float, z: float, w: float) -> np.ndarray:
@@ -35,8 +45,13 @@ def _quaternion_matrix(x: float, y: float, z: float, w: float) -> np.ndarray:
 
 
 class ArmControlNode(Node):
-    def __init__(self) -> None:
-        super().__init__("arm_control_node")
+    def __init__(
+        self, parameter_overrides: list[Parameter] | None = None
+    ) -> None:
+        super().__init__(
+            "arm_control_node",
+            parameter_overrides=parameter_overrides,
+        )
         description_share = Path(
             get_package_share_directory("jgarm_description")
         )
@@ -51,39 +66,59 @@ class ArmControlNode(Node):
         kd = self.declare_parameter(
             "kd", [2.0, 4.0, 4.0, 1.5, 1.0, 0.5]
         ).value
-        effort_limits = self.declare_parameter(
-            "effort_limits", [25.0, 63.0, 35.0, 18.0, 6.0, 3.0]
-        ).value
+        gravity_enabled = bool(
+            self.declare_parameter("gravity_enabled", True).value
+        )
         control_rate_hz = float(
             self.declare_parameter("control_rate_hz", 500.0).value
         )
         self._state_timeout_s = float(
             self.declare_parameter("state_timeout_s", 0.2).value
         )
+        if not np.isfinite(control_rate_hz) or control_rate_hz <= 0.0:
+            raise ValueError("control_rate_hz must be finite and positive")
+        if (
+            not np.isfinite(self._state_timeout_s)
+            or self._state_timeout_s <= 0.0
+        ):
+            raise ValueError("state_timeout_s must be finite and positive")
 
         self.kinematics = Kinematics(urdf_path)
-        self.dynamics = PinocchioDynamics(urdf_path)
+        hardware_profile = self._load_hardware_profile()
+        self.hardware_profile = hardware_profile
         self.controller = PDGravityController(
             PDGains(np.asarray(kp), np.asarray(kd)),
-            np.asarray(effort_limits),
-            self.dynamics.gravity_torque,
+            hardware_profile.effort_limits_nm,
+            gravity_enabled=gravity_enabled,
+            hardware_profile=hardware_profile,
         )
-        self._target_position = np.array(
+        target_position = vector6(
             self.declare_parameter(
-                "target_position", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                "target_position", list(POWER_ON_POSITION_RAD)
             ).value,
-            dtype=np.float64,
+            "target_position",
+        )
+        self._target_position = np.clip(
+            target_position,
+            self.kinematics.joint_limits_rad[:, 0],
+            self.kinematics.joint_limits_rad[:, 1],
         )
         self._target_velocity = np.zeros(JOINT_COUNT)
         self._latest_state: JointFeedback | None = None
         self._latest_state_time = 0.0
         self._current_position = np.zeros(JOINT_COUNT)
+        self._enabled = True
+        self._control_counter = 0
+        debug_divider = max(1, round(control_rate_hz / 50.0))
 
         state_qos = QoSProfile(
             depth=10, reliability=ReliabilityPolicy.RELIABLE
         )
         self.create_subscription(
-            JointState, "/joint_states", self._state_callback, state_qos
+            JointState,
+            "/arm/control/joint_state",
+            self._state_callback,
+            state_qos,
         )
         self.create_subscription(
             Float64MultiArray,
@@ -103,9 +138,159 @@ class ArmControlNode(Node):
         self._effort_publisher = self.create_publisher(
             Float64MultiArray, "/arm/control/effort_cmd", 10
         )
+        self._pd_publisher = self.create_publisher(
+            Float64MultiArray, "/arm/debug/pd_effort", 10
+        )
+        self._gravity_publisher = self.create_publisher(
+            Float64MultiArray, "/arm/debug/gravity_effort", 10
+        )
+        self._friction_publisher = self.create_publisher(
+            Float64MultiArray, "/arm/debug/friction_effort", 10
+        )
+        self._breakaway_publisher = self.create_publisher(
+            Float64MultiArray, "/arm/debug/breakaway_effort", 10
+        )
+        self._error_publisher = self.create_publisher(
+            Float64MultiArray, "/arm/debug/position_error", 10
+        )
+        self._enable_service = self.create_service(
+            SetBool, "/arm/control/enable", self._enable_callback
+        )
+        self.add_on_set_parameters_callback(self._parameter_callback)
+        self._debug_divider = debug_divider
         self.create_timer(1.0 / control_rate_hz, self._control_step)
         self.get_logger().info(
-            f"Arm control started at {control_rate_hz:.0f} Hz"
+            f"Arm control started at {control_rate_hz:.0f} Hz with "
+            f"profile {hardware_profile.profile_id}"
+        )
+
+    def _load_hardware_profile(self) -> EngineerHardwareProfile:
+        return EngineerHardwareProfile(
+            profile_id=str(
+                self.declare_parameter(
+                    "hardware_profile.id", "reatrm_engineer"
+                ).value
+            ),
+            motor_types=tuple(
+                self.declare_parameter(
+                    "hardware_profile.motor_types",
+                    [
+                        "DM4310",
+                        "LK_MF7015",
+                        "LK_MF7015",
+                        "DM4310",
+                        "DM4310",
+                        "DM4310",
+                    ],
+                ).value
+            ),
+            joint_gear_ratio=self.declare_parameter(
+                "hardware_profile.joint_gear_ratio",
+                [1.0, 50.0, 50.0, 1.0, 1.5, 1.0],
+            ).value,
+            effort_limits_nm=self.declare_parameter(
+                "hardware_profile.effort_limits_nm",
+                [10.0, 63.0, 35.0, 10.0, 6.0, 3.0],
+            ).value,
+            command_rate_hz=float(
+                self.declare_parameter(
+                    "hardware_profile.command_rate_hz", 500.0
+                ).value
+            ),
+            state_rate_hz=float(
+                self.declare_parameter(
+                    "hardware_profile.state_rate_hz", 111.111111
+                ).value
+            ),
+            joint_viscous_damping_nm_s_rad=self.declare_parameter(
+                "hardware_profile.joint_viscous_damping_nm_s_rad",
+                [0.05] * JOINT_COUNT,
+            ).value,
+            joint_armature_kg_m2=self.declare_parameter(
+                "hardware_profile.joint_armature_kg_m2",
+                [0.001] * JOINT_COUNT,
+            ).value,
+            actuator_time_constant_s=self.declare_parameter(
+                "hardware_profile.actuator_time_constant_s",
+                [0.005] * JOINT_COUNT,
+            ).value,
+            gravity_j5_config_weight=float(
+                self.declare_parameter(
+                    "hardware_profile.gravity_j5_config_weight", 0.35
+                ).value
+            ),
+            gravity_j5_conservative_coupling=bool(
+                self.declare_parameter(
+                    "hardware_profile."
+                    "gravity_j5_conservative_coupling",
+                    True,
+                ).value
+            ),
+            gravity_p_nm=self.declare_parameter(
+                "hardware_profile.gravity_p_nm",
+                [0.0, 20.284, -15.112, -0.579, 16.368, 0.0],
+            ).value,
+            gravity_q_nm=self.declare_parameter(
+                "hardware_profile.gravity_q_nm",
+                [0.0, -60.824, 2.680, 0.380, -0.715, 0.0],
+            ).value,
+            gravity_bias_nm=self.declare_parameter(
+                "hardware_profile.gravity_bias_nm",
+                [0.0, -22.244, 1.534, 0.0, -13.608, 0.0],
+            ).value,
+            friction_torque_nm=self.declare_parameter(
+                "hardware_profile.friction_torque_nm",
+                [0.0, 11.6, 7.4, 0.0, 0.75, 0.0],
+            ).value,
+            friction_velocity_scale_rad_s=self.declare_parameter(
+                "hardware_profile.friction_velocity_scale_rad_s",
+                [0.2, 0.2, 0.2, 0.2, 0.2, 0.2],
+            ).value,
+            breakaway_torque_nm=self.declare_parameter(
+                "hardware_profile.breakaway_torque_nm",
+                [0.0, 11.25, 10.0, 0.0, 0.4, 0.2],
+            ).value,
+            breakaway_error_scale_rad=float(
+                self.declare_parameter(
+                    "hardware_profile.breakaway_error_scale_rad", 0.01
+                ).value
+            ),
+            breakaway_target_velocity_threshold_rad_s=float(
+                self.declare_parameter(
+                    "hardware_profile."
+                    "breakaway_target_velocity_threshold_rad_s",
+                    0.02,
+                ).value
+            ),
+            breakaway_actual_velocity_threshold_rad_s=float(
+                self.declare_parameter(
+                    "hardware_profile."
+                    "breakaway_actual_velocity_threshold_rad_s",
+                    0.03,
+                ).value
+            ),
+            plant_breakaway_velocity_scale_rad_s=float(
+                self.declare_parameter(
+                    "hardware_profile."
+                    "plant_breakaway_velocity_scale_rad_s",
+                    0.02,
+                ).value
+            ),
+            plant_gravity_enabled=bool(
+                self.declare_parameter(
+                    "hardware_profile.plant_gravity_enabled", False
+                ).value
+            ),
+            plant_friction_enabled=bool(
+                self.declare_parameter(
+                    "hardware_profile.plant_friction_enabled", True
+                ).value
+            ),
+            plant_breakaway_enabled=bool(
+                self.declare_parameter(
+                    "hardware_profile.plant_breakaway_enabled", True
+                ).value
+            ),
         )
 
     def _state_callback(self, message: JointState) -> None:
@@ -114,6 +299,7 @@ class ArmControlNode(Node):
         }
         position = np.full(JOINT_COUNT, np.nan)
         velocity = np.full(JOINT_COUNT, np.nan)
+        effort = np.zeros(JOINT_COUNT)
         for index, name in enumerate(JOINT_NAMES):
             source = index_by_name.get(name)
             if source is None:
@@ -122,11 +308,13 @@ class ArmControlNode(Node):
                 position[index] = message.position[source]
             if source < len(message.velocity):
                 velocity[index] = message.velocity[source]
+            if source < len(message.effort):
+                effort[index] = message.effort[source]
         alive = np.isfinite(position) & np.isfinite(velocity)
         self._latest_state = JointFeedback(
             position,
             velocity,
-            np.zeros(JOINT_COUNT),
+            effort,
             alive,
         )
         self._latest_state_time = time.monotonic()
@@ -149,6 +337,47 @@ class ArmControlNode(Node):
             self.kinematics.joint_limits_rad[:, 1],
         )
         self._target_velocity = np.zeros(JOINT_COUNT)
+
+    def _enable_callback(
+        self, request: SetBool.Request, response: SetBool.Response
+    ) -> SetBool.Response:
+        self._enabled = bool(request.data)
+        if not self._enabled:
+            self._target_position = self._current_position.copy()
+            self._target_velocity = np.zeros(JOINT_COUNT)
+            self._publish_command(self.controller.safe_stop())
+        response.success = True
+        response.message = "Arm controller enabled" if self._enabled else (
+            "Arm controller disabled; zero torque requested"
+        )
+        self.get_logger().info(response.message)
+        return response
+
+    def _parameter_callback(
+        self, parameters
+    ) -> SetParametersResult:
+        kp = self.get_parameter("kp").value
+        kd = self.get_parameter("kd").value
+        gravity_enabled = self.get_parameter("gravity_enabled").value
+        for parameter in parameters:
+            if parameter.name == "kp":
+                kp = parameter.value
+            elif parameter.name == "kd":
+                kd = parameter.value
+            elif parameter.name == "gravity_enabled":
+                if not isinstance(parameter.value, bool):
+                    return SetParametersResult(
+                        successful=False,
+                        reason="gravity_enabled must be a boolean",
+                    )
+                gravity_enabled = parameter.value
+        try:
+            gains = PDGains(np.asarray(kp), np.asarray(kd))
+        except (TypeError, ValueError) as error:
+            return SetParametersResult(successful=False, reason=str(error))
+        self.controller.set_gains(gains)
+        self.controller.set_gravity_enabled(bool(gravity_enabled))
+        return SetParametersResult(successful=True)
 
     def _joint_velocity_callback(
         self, message: Float64MultiArray
@@ -200,15 +429,52 @@ class ArmControlNode(Node):
             return
         age = time.monotonic() - self._latest_state_time
         if age > self._state_timeout_s:
+            self._publish_command(self.controller.safe_stop())
             return
-        command = self.controller.compute(
-            self._latest_state,
-            self._target_position,
-            self._target_velocity,
-        )
+        if self._enabled:
+            command = self.controller.compute(
+                self._latest_state,
+                self._target_position,
+                self._target_velocity,
+            )
+        else:
+            command = self.controller.safe_stop()
+        self._publish_command(command)
+
+    def _publish_command(self, command: TorqueCommand) -> None:
         message = Float64MultiArray()
         message.data = command.effort_nm.tolist()
         self._effort_publisher.publish(message)
+        self._control_counter += 1
+        if self._control_counter % self._debug_divider == 0:
+            self._pd_publisher.publish(
+                Float64MultiArray(
+                    data=self.controller.last_pd_effort_nm.tolist()
+                )
+            )
+            self._gravity_publisher.publish(
+                Float64MultiArray(
+                    data=self.controller.last_gravity_effort_nm.tolist()
+                )
+            )
+            self._friction_publisher.publish(
+                Float64MultiArray(
+                    data=self.controller.last_friction_effort_nm.tolist()
+                )
+            )
+            self._breakaway_publisher.publish(
+                Float64MultiArray(
+                    data=self.controller.last_breakaway_effort_nm.tolist()
+                )
+            )
+            if self._latest_state is not None:
+                error = (
+                    self._target_position
+                    - self._latest_state.position_rad
+                )
+                self._error_publisher.publish(
+                    Float64MultiArray(data=error.tolist())
+                )
 
 
 def main(args=None) -> None:

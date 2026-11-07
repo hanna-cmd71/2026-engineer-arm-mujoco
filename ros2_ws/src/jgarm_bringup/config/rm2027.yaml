@@ -1,0 +1,62 @@
+# RoboMaster 2027 rules 4.2.6, 4.5.1, and 5.4.3.
+rm2027_rules:
+  resource_station:
+    energy_unit_count: 6
+    magnetic_release_force_max_n: 10.0
+    extraction_distance_source: placement_post_length
+    extraction_lateral_clearance_m: 0.01
+    extraction_angular_clearance_deg: 10.0
+    extraction_axis_local: +z
+    random_rotation_about_symmetry_axis: true
+    # MuJoCo equality constraints named storage_magnet_01...06 hold the
+    # units initially and can be disabled by the future extraction handler.
+    magnet_constraint_prefix: storage_magnet_
+  energy_unit:
+    nominal_mass_kg: 0.4
+    mass_min_kg: 0.35
+    mass_max_kg: 0.45
+    symmetry_axis: z
+    double_ended_asymmetric: true
+    assembly_insert_axis_local: -z
+  science_core:
+    assembly_frame: assembly_post_front_E
+    coordinate_origin: base_front_ground_midpoint
+    initial_pose:
+      x_m: -0.2
+      y_m: 0.2
+      z_m: 0.8
+      theta_deg: 0.0
+      phi_deg: 90.0
+      alpha_deg: 0.0
+    workspace:
+      x_m: [-0.1, 0.0]
+      y_m: [0.1, 0.3]
+      z_m: [0.5, 0.7]
+      theta_deg: [-90.0, 90.0]
+      phi_deg: [0.0, 90.0]
+      alpha_deg: [-45.0, 45.0]
+    assembly_motion:
+      insertion_axis: -x
+      insertion_axis_reference_frame: science_core
+      insertion_distance_m: 0.1
+      lift_axis: z
+      lift_distance_m: 0.1
+      lift_resistance_max_n: 10.0
+      p_axis_rotation_deg: 90.0
+      q_axis_rotation_range_deg: [-90.0, 90.0]
+      q_axis_angle_tolerance_deg: 5.0
+      q_axis_dwell_min_s: 0.3
+      q_axis_dwell_max_s: 0.5
+      q_axis_return_torque_max_nm: 0.3
+      q_axis_hold_torque_nm: 0.5
+      q_axis_hold_trigger_s: 2.0
+    assembly_difficulties:
+      level_1: [select_difficulty, insert, confirm]
+      level_2: [select_difficulty, insert, lift, confirm]
+      level_3:
+        [select_difficulty, insert, lift, rotate_p, rotate_q, confirm]
+      level_4:
+        [select_difficulty, insert, lift, rotate_p, rotate_q, confirm,
+         complete_second_core]
+      level_4_step_deadline_s: 5.0
+      level_4_total_deadline_s: 45.0

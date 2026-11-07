@@ -19,12 +19,12 @@ def test_pinocchio_gravity_matches_mujoco() -> None:
         joints = random.uniform(
             backend.joint_ranges[:, 0], backend.joint_ranges[:, 1]
         )
-        scratch.qpos[:] = joints
+        scratch.qpos[backend._joint_qpos_adr] = joints
         scratch.qvel[:] = 0.0
         scratch.qacc[:] = 0.0
         mujoco.mj_forward(backend.model, scratch)
         np.testing.assert_allclose(
             dynamics.gravity_torque(joints),
-            scratch.qfrc_bias[:6],
+            scratch.qfrc_bias[backend._joint_dof_adr],
             atol=5e-6,
         )

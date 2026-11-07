@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import mujoco
 import numpy as np
 from scipy.spatial.transform import Rotation
 
@@ -12,6 +13,12 @@ from jgarm_sim.kinematics import IKOptions, Kinematics
 def test_kdl_fk_matches_mujoco_tcp() -> None:
     kinematics = Kinematics()
     backend = MuJoCoArmBackend()
+    base_id = mujoco.mj_name2id(
+        backend.model,
+        mujoco.mjtObj.mjOBJ_BODY,
+        "base_link",
+    )
+    assert base_id >= 0
     random = np.random.default_rng(12)
     max_position_error = 0.0
     max_rotation_error = 0.0
@@ -24,9 +31,12 @@ def test_kdl_fk_matches_mujoco_tcp() -> None:
         kdl_pose = kinematics.forward(joints)
         backend.reset(joints)
         mujoco_pose = backend.tcp_pose()
+        mujoco_position = (
+            mujoco_pose[:3, 3] - backend.data.xpos[base_id]
+        )
         max_position_error = max(
             max_position_error,
-            float(np.linalg.norm(kdl_pose[:3, 3] - mujoco_pose[:3, 3])),
+            float(np.linalg.norm(kdl_pose[:3, 3] - mujoco_position)),
         )
         max_rotation_error = max(
             max_rotation_error,
@@ -105,4 +115,3 @@ def test_position_only_ik_preserves_seed_orientation() -> None:
         position_only=True,
     )
     assert result.success
-

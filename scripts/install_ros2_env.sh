@@ -16,9 +16,9 @@ if [[ ! -f /opt/ros/jazzy/setup.bash ]]; then
 fi
 
 source /opt/ros/jazzy/setup.bash
-if ! /usr/bin/python3 -c "import PyKDL, rclpy"; then
-  echo "System PyKDL or rclpy is unavailable." >&2
-  echo "Install the ROS 2 Jazzy Python and PyKDL packages first." >&2
+if ! /usr/bin/python3 -c "import PyKDL, PyQt5, rclpy"; then
+  echo "System PyKDL, PyQt5, or rclpy is unavailable." >&2
+  echo "Install the ROS 2 Jazzy desktop and PyKDL packages first." >&2
   exit 1
 fi
 
@@ -60,12 +60,14 @@ PYTHONPATH="${site_packages}:${site_packages}/cmeel.prefix/lib/python3.12/site-p
   /usr/bin/python3 - <<'PY'
 import rclpy
 import PyKDL
+import PyQt5
 import mujoco
 import pinocchio
 import kdl_parser_py.urdf
 
 print(f"rclpy: {rclpy.__file__}")
 print(f"PyKDL: {PyKDL.__file__}")
+print(f"PyQt5: {PyQt5.__file__}")
 print(f"MuJoCo: {mujoco.__version__}")
 print(f"Pinocchio: {pinocchio.__version__}")
 PY

@@ -6,10 +6,19 @@
 
   <group_state name="initial" group="JG_arm">
     <joint name="joint_1" value="0"/>
-    <joint name="joint_2" value="-0.8"/>
-    <joint name="joint_3" value="0.8"/>
+    <joint name="joint_2" value="-1.3265"/>
+    <joint name="joint_3" value="1.35"/>
     <joint name="joint_4" value="0"/>
-    <joint name="joint_5" value="0.3"/>
+    <joint name="joint_5" value="0"/>
+    <joint name="joint_6" value="0"/>
+  </group_state>
+
+  <group_state name="urdf_zero" group="JG_arm">
+    <joint name="joint_1" value="0"/>
+    <joint name="joint_2" value="0"/>
+    <joint name="joint_3" value="0"/>
+    <joint name="joint_4" value="0"/>
+    <joint name="joint_5" value="0"/>
     <joint name="joint_6" value="0"/>
   </group_state>
 

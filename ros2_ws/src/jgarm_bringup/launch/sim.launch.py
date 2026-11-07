@@ -7,6 +7,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.parameter_descriptions import ParameterValue
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -19,11 +20,17 @@ def generate_launch_description() -> LaunchDescription:
 
     viewer = LaunchConfiguration("viewer")
     moveit = LaunchConfiguration("moveit")
+    dashboard = LaunchConfiguration("dashboard")
+    show_frames = LaunchConfiguration("show_frames")
+    draggable_units = LaunchConfiguration("draggable_units")
     control_config = PathJoinSubstitution(
         [FindPackageShare("jgarm_bringup"), "config", "control.yaml"]
     )
     sim_config = PathJoinSubstitution(
         [FindPackageShare("jgarm_bringup"), "config", "sim.yaml"]
+    )
+    hardware_profile = PathJoinSubstitution(
+        [FindPackageShare("jgarm_bringup"), "config", "hardware_profile.yaml"]
     )
 
     return LaunchDescription(
@@ -38,12 +45,28 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="true",
                 description="Start the MoveIt 2 move_group node.",
             ),
+            DeclareLaunchArgument(
+                "dashboard",
+                default_value="true",
+                description="Open the joint and torque dashboard.",
+            ),
+            DeclareLaunchArgument(
+                "show_frames",
+                default_value="false",
+                description="Show model, post, and energy-unit frames.",
+            ),
+            DeclareLaunchArgument(
+                "draggable_units",
+                default_value="true",
+                description="Release a magnetic constraint when selecting a unit.",
+            ),
             Node(
                 package="jgarm_sim_cpp",
                 executable="mujoco_sim_node",
                 name="mujoco_sim_node",
                 output="screen",
                 parameters=[
+                    hardware_profile,
                     sim_config,
                     {"model_path": str(model_path)},
                 ],
@@ -54,6 +77,7 @@ def generate_launch_description() -> LaunchDescription:
                 name="arm_control_node",
                 output="screen",
                 parameters=[
+                    hardware_profile,
                     control_config,
                     {"urdf_path": str(urdf_path)},
                 ],
@@ -74,32 +98,6 @@ def generate_launch_description() -> LaunchDescription:
                     {"robot_description": urdf_path.read_text(encoding="utf-8")}
                 ],
             ),
-            Node(
-                package="tf2_ros",
-                executable="static_transform_publisher",
-                name="world_to_base_link",
-                output="screen",
-                arguments=[
-                    "--x",
-                    "0",
-                    "--y",
-                    "0",
-                    "--z",
-                    "0",
-                    "--qx",
-                    "0",
-                    "--qy",
-                    "0",
-                    "--qz",
-                    "0",
-                    "--qw",
-                    "1",
-                    "--frame-id",
-                    "world",
-                    "--child-frame-id",
-                    "base_link",
-                ],
-            ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     PathJoinSubstitution(
@@ -118,7 +116,26 @@ def generate_launch_description() -> LaunchDescription:
                 name="arm_viewer_node",
                 output="screen",
                 condition=IfCondition(viewer),
-                parameters=[{"model_path": str(model_path)}],
+                parameters=[
+                    {
+                        "model_path": str(model_path),
+                        "show_frames": ParameterValue(
+                            show_frames,
+                            value_type=bool,
+                        ),
+                        "draggable_energy_units": ParameterValue(
+                            draggable_units,
+                            value_type=bool,
+                        ),
+                    }
+                ],
+            ),
+            Node(
+                package="jgarm_control",
+                executable="dashboard_node",
+                name="jgarm_dashboard",
+                output="screen",
+                condition=IfCondition(dashboard),
             ),
         ]
     )

@@ -32,9 +32,9 @@ class MuJoCoArmBackend:
         self.model = mujoco.MjModel.from_xml_path(str(self.model_path))
         self.data = mujoco.MjData(self.model)
 
-        if self.model.nq != JOINT_COUNT or self.model.nv != JOINT_COUNT:
+        if self.model.nq < JOINT_COUNT or self.model.nv < JOINT_COUNT:
             raise ValueError(
-                "The backend requires exactly six scalar joint coordinates"
+                "The model requires at least six scalar joint coordinates"
             )
         if self.model.nu != JOINT_COUNT:
             raise ValueError("The backend requires exactly six actuators")
@@ -61,6 +61,9 @@ class MuJoCoArmBackend:
         self._control_limits = self.model.actuator_ctrlrange[
             self._actuator_ids
         ].copy()
+        self._power_on_key_id = self._require_id(
+            mujoco.mjtObj.mjOBJ_KEY, "power_on"
+        )
 
         self.control_period_s = float(control_period_s)
         if not np.isfinite(self.control_period_s) or self.control_period_s <= 0.0:
@@ -105,8 +108,12 @@ class MuJoCoArmBackend:
     ) -> None:
         """Resets simulation state and applies zero torque."""
         self._ensure_open()
-        mujoco.mj_resetData(self.model, self.data)
-        if position_rad is not None:
+        if position_rad is None:
+            mujoco.mj_resetDataKeyframe(
+                self.model, self.data, self._power_on_key_id
+            )
+        else:
+            mujoco.mj_resetData(self.model, self.data)
             desired = np.asarray(position_rad, dtype=np.float64).reshape(-1)
             if desired.shape != (JOINT_COUNT,):
                 raise ValueError(f"position_rad must contain {JOINT_COUNT} values")

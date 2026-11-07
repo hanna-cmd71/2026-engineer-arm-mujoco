@@ -1,0 +1,78 @@
+<mujoco>
+  <asset>
+    <mesh name="energy_storage_part_00" file="scene/collision/energy_storage_part_00.stl"/>
+    <mesh name="energy_storage_part_01" file="scene/collision/energy_storage_part_01.stl"/>
+    <mesh name="energy_storage_part_02" file="scene/collision/energy_storage_part_02.stl"/>
+    <mesh name="energy_storage_part_03" file="scene/collision/energy_storage_part_03.stl"/>
+    <mesh name="energy_storage_part_04" file="scene/collision/energy_storage_part_04.stl"/>
+    <mesh name="energy_storage_part_05" file="scene/collision/energy_storage_part_05.stl"/>
+    <mesh name="energy_storage_part_06" file="scene/collision/energy_storage_part_06.stl"/>
+    <mesh name="energy_storage_part_07" file="scene/collision/energy_storage_part_07.stl"/>
+    <mesh name="energy_storage_part_08" file="scene/collision/energy_storage_part_08.stl"/>
+    <mesh name="energy_storage_part_09" file="scene/collision/energy_storage_part_09.stl"/>
+    <mesh name="energy_storage_part_10" file="scene/collision/energy_storage_part_10.stl"/>
+    <mesh name="energy_storage_part_11" file="scene/collision/energy_storage_part_11.stl"/>
+    <mesh name="energy_storage_part_12" file="scene/collision/energy_storage_part_12.stl"/>
+    <mesh name="energy_storage_part_13" file="scene/collision/energy_storage_part_13.stl"/>
+    <mesh name="energy_storage_part_14" file="scene/collision/energy_storage_part_14.stl"/>
+    <mesh name="energy_storage_part_15" file="scene/collision/energy_storage_part_15.stl"/>
+    <mesh name="energy_storage_part_16" file="scene/collision/energy_storage_part_16.stl"/>
+    <mesh name="energy_storage_part_17" file="scene/collision/energy_storage_part_17.stl"/>
+    <mesh name="energy_storage_part_18" file="scene/collision/energy_storage_part_18.stl"/>
+    <mesh name="energy_storage_part_19" file="scene/collision/energy_storage_part_19.stl"/>
+    <mesh name="energy_storage_part_20" file="scene/collision/energy_storage_part_20.stl"/>
+    <mesh name="energy_storage_part_21" file="scene/collision/energy_storage_part_21.stl"/>
+    <mesh name="energy_storage_part_22" file="scene/collision/energy_storage_part_22.stl"/>
+    <mesh name="energy_storage_part_23" file="scene/collision/energy_storage_part_23.stl"/>
+    <mesh name="energy_storage_part_24" file="scene/collision/energy_storage_part_24.stl"/>
+    <mesh name="energy_storage_part_25" file="scene/collision/energy_storage_part_25.stl"/>
+    <mesh name="energy_storage_part_26" file="scene/collision/energy_storage_part_26.stl"/>
+    <mesh name="energy_storage_part_27" file="scene/collision/energy_storage_part_27.stl"/>
+    <mesh name="energy_storage_part_28" file="scene/collision/energy_storage_part_28.stl"/>
+    <mesh name="energy_storage_part_29" file="scene/collision/energy_storage_part_29.stl"/>
+    <mesh name="energy_storage_part_30" file="scene/collision/energy_storage_part_30.stl"/>
+    <mesh name="energy_storage_part_31" file="scene/collision/energy_storage_part_31.stl"/>
+    <mesh name="energy_storage_part_32" file="scene/collision/energy_storage_part_32.stl"/>
+    <mesh name="energy_storage_part_33" file="scene/collision/energy_storage_part_33.stl"/>
+  </asset>
+  <worldbody>
+    <body name="energy_storage_solids" pos="0 0.95 -0.105" quat="0 0 0.70710678 0.70710678">
+      <geom name="energy_storage_part_00_collision" type="mesh" mesh="energy_storage_part_00" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_01_collision" type="mesh" mesh="energy_storage_part_01" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_02_collision" type="mesh" mesh="energy_storage_part_02" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_03_collision" type="mesh" mesh="energy_storage_part_03" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_05_collision" type="mesh" mesh="energy_storage_part_05" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_06_collision" type="mesh" mesh="energy_storage_part_06" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_07_collision" type="mesh" mesh="energy_storage_part_07" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_08_collision" type="mesh" mesh="energy_storage_part_08" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_09_collision" type="mesh" mesh="energy_storage_part_09" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_10_collision" type="mesh" mesh="energy_storage_part_10" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_11_collision" type="mesh" mesh="energy_storage_part_11" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_12_collision" type="mesh" mesh="energy_storage_part_12" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_13_collision" type="mesh" mesh="energy_storage_part_13" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_14_collision" type="mesh" mesh="energy_storage_part_14" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_15_collision" type="mesh" mesh="energy_storage_part_15" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_16_collision" type="mesh" mesh="energy_storage_part_16" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_17_collision" type="mesh" mesh="energy_storage_part_17" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_18_collision" type="mesh" mesh="energy_storage_part_18" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_19_collision" type="mesh" mesh="energy_storage_part_19" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_20_collision" type="mesh" mesh="energy_storage_part_20" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_21_collision" type="mesh" mesh="energy_storage_part_21" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_22_collision" type="mesh" mesh="energy_storage_part_22" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_23_collision" type="mesh" mesh="energy_storage_part_23" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_24_collision" type="mesh" mesh="energy_storage_part_24" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_25_collision" type="mesh" mesh="energy_storage_part_25" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_26_collision" type="mesh" mesh="energy_storage_part_26" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_27_collision" type="mesh" mesh="energy_storage_part_27" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_28_collision" type="mesh" mesh="energy_storage_part_28" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_29_collision" type="mesh" mesh="energy_storage_part_29" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_30_collision" type="mesh" mesh="energy_storage_part_30" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_31_collision" type="mesh" mesh="energy_storage_part_31" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_32_collision" type="mesh" mesh="energy_storage_part_32" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+      <geom name="energy_storage_part_33_collision" type="mesh" mesh="energy_storage_part_33" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+    </body>
+    <body name="energy_storage_outer_hull" pos="0 0.95 -0.105" quat="0 0 0.70710678 0.70710678">
+      <geom name="energy_storage_part_04_collision" type="mesh" mesh="energy_storage_part_04" contype="2" conaffinity="1" condim="3" group="3" rgba="0.15 0.55 0.85 0.18" friction="0.8 0.02 0.01"/>
+    </body>
+  </worldbody>
+</mujoco>

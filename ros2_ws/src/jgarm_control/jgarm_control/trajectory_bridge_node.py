@@ -35,11 +35,29 @@ class TrajectoryBridgeNode(Node):
         self._state_timeout_s = float(
             self.declare_parameter("state_timeout_s", 0.2).value
         )
+        self._start_tolerance_rad = float(
+            self.declare_parameter("start_tolerance_rad", 0.03).value
+        )
+        if (
+            not np.isfinite(self._goal_tolerance_rad)
+            or not np.isfinite(self._goal_hold_time_s)
+            or not np.isfinite(self._publish_rate_hz)
+            or not np.isfinite(self._state_timeout_s)
+            or not np.isfinite(self._start_tolerance_rad)
+            or self._goal_tolerance_rad < 0.0
+            or self._goal_hold_time_s < 0.0
+            or self._publish_rate_hz <= 0.0
+            or self._state_timeout_s <= 0.0
+            or self._start_tolerance_rad < 0.0
+        ):
+            raise ValueError("Trajectory bridge parameters are invalid")
         self._lock = threading.Lock()
         self._latest_state: JointState | None = None
         self._latest_state_time = 0.0
         self._active_goal = None
         self._cancel_requested = False
+        self._last_target_position = np.zeros(JOINT_COUNT)
+        self._last_target_velocity = np.zeros(JOINT_COUNT)
         callback_group = ReentrantCallbackGroup()
 
         state_qos = QoSProfile(
@@ -74,10 +92,18 @@ class TrajectoryBridgeNode(Node):
 
     def _accept_goal(self, goal_request) -> GoalResponse:
         if self._active_goal is not None:
-            self.get_logger().warning("Rejecting trajectory: goal already active")
+            self.get_logger().warning(
+                "Rejecting trajectory: goal already active"
+            )
             return GoalResponse.REJECT
         try:
-            JointTrajectory.from_message(goal_request.trajectory)
+            trajectory = JointTrajectory.from_message(
+                goal_request.trajectory
+            )
+            if trajectory.times_s.size < 2:
+                raise ValueError(
+                    "Trajectory must contain at least two points"
+                )
         except ValueError as error:
             self.get_logger().warning(f"Rejecting trajectory: {error}")
             return GoalResponse.REJECT
@@ -105,7 +131,11 @@ class TrajectoryBridgeNode(Node):
                 velocity[index] = message.velocity[source]
         return position, velocity
 
-    def _publish_target(self, position: np.ndarray, velocity: np.ndarray) -> None:
+    def _publish_target(
+        self, position: np.ndarray, velocity: np.ndarray
+    ) -> None:
+        self._last_target_position = position.copy()
+        self._last_target_velocity = velocity.copy()
         position_message = Float64MultiArray()
         position_message.data = position.tolist()
         self._position_publisher.publish(position_message)
@@ -116,16 +146,52 @@ class TrajectoryBridgeNode(Node):
     def _execute(self, goal_handle):
         result = FollowJointTrajectory.Result()
         try:
-            trajectory = JointTrajectory.from_message(goal_handle.request.trajectory)
+            trajectory = JointTrajectory.from_message(
+                goal_handle.request.trajectory
+            )
         except ValueError as error:
             result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
             result.error_string = str(error)
             goal_handle.abort()
             return result
 
+        with self._lock:
+            state = self._latest_state
+            state_time = self._latest_state_time
+        if (
+            state is None
+            or time.monotonic() - state_time > self._state_timeout_s
+        ):
+            result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
+            result.error_string = "Fresh joint state is unavailable"
+            goal_handle.abort()
+            return result
+        actual, _ = self._ordered_joint_state(state)
+        start_error = np.max(
+            np.abs(actual - trajectory.positions_rad[0])
+        )
+        if not np.isfinite(start_error):
+            result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
+            result.error_string = "Joint state or trajectory is invalid"
+            goal_handle.abort()
+            return result
+        if start_error > self._start_tolerance_rad:
+            result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
+            result.error_string = (
+                f"Trajectory start error {start_error:.4f} rad exceeds "
+                f"{self._start_tolerance_rad:.4f} rad"
+            )
+            goal_handle.abort()
+            return result
+
         self._active_goal = goal_handle
         self._cancel_requested = False
-        start_time = time.monotonic()
+        self._publish_target(
+            trajectory.positions_rad[0],
+            trajectory.velocities_rad_s[0],
+        )
+        elapsed = 0.0
+        last_iteration_time = time.monotonic()
         feedback = FollowJointTrajectory.Feedback()
         feedback.joint_names = list(JOINT_NAMES)
         period = 1.0 / self._publish_rate_hz
@@ -136,10 +202,12 @@ class TrajectoryBridgeNode(Node):
             while rclpy.ok():
                 if self._cancel_requested:
                     self._publish_target(
-                        trajectory.positions_rad[-1],
+                        self._last_target_position,
                         np.zeros(JOINT_COUNT),
                     )
-                    result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
+                    result.error_code = (
+                        FollowJointTrajectory.Result.INVALID_GOAL
+                    )
                     result.error_string = "Trajectory execution canceled"
                     goal_handle.canceled()
                     return result
@@ -151,10 +219,14 @@ class TrajectoryBridgeNode(Node):
                     state is None
                     or time.monotonic() - state_time > self._state_timeout_s
                 ):
+                    self._publish_target(
+                        self._last_target_position,
+                        np.zeros(JOINT_COUNT),
+                    )
+                    last_iteration_time = time.monotonic()
                     time.sleep(period)
                     continue
 
-                elapsed = time.monotonic() - start_time
                 position, velocity = trajectory.sample(elapsed)
                 self._publish_target(position, velocity)
                 actual, actual_velocity = self._ordered_joint_state(state)
@@ -176,7 +248,9 @@ class TrajectoryBridgeNode(Node):
                     self._publish_target(final, np.zeros(JOINT_COUNT))
                     error = np.max(np.abs(actual - final))
                     if error <= self._goal_tolerance_rad:
-                        result.error_code = FollowJointTrajectory.Result.SUCCESSFUL
+                        result.error_code = (
+                            FollowJointTrajectory.Result.SUCCESSFUL
+                        )
                         result.error_string = "Trajectory completed"
                         goal_handle.succeed()
                     else:
@@ -184,12 +258,16 @@ class TrajectoryBridgeNode(Node):
                             FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
                         )
                         result.error_string = (
-                            f"Final joint error {error:.4f} rad exceeds tolerance"
+                            f"Final joint error {error:.4f} rad "
+                            "exceeds tolerance"
                         )
                         goal_handle.abort()
                     return result
                 iteration += 1
                 time.sleep(period)
+                now = time.monotonic()
+                elapsed += now - last_iteration_time
+                last_iteration_time = now
         finally:
             self._active_goal = None
             self._cancel_requested = False
