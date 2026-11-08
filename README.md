@@ -60,11 +60,149 @@ The joint viscous damping (`0.05 N*m*s/rad` for J1-J3 and
 response are explicitly marked simulation placeholders. reATRM does not identify
 these values, so they must not be presented as measured hardware data.
 
+## Nominal model
+
+[nominal_model.yaml](ros2_ws/src/jgarm_bringup/config/nominal_model.yaml)
+defines the hardware-free nominal model. Link mass and center of mass are read
+from [JGarm.urdf](JGarm.urdf), and the controller uses the resulting physical
+gravity by default. The launch arguments are `gravity_model:=physical` and
+`controller_mode:=pd`.
+
+The reATRM polynomial gravity remains available as `gravity_model:=empirical`
+for comparison. It differs substantially from the URDF mass/COM gravity: at the
+all-zero pose, J2 is about `-17.651 N*m` in the empirical model and about
+`-3.545 N*m` in the physical model. The physical model is the default because
+it is self-consistent with the MuJoCo plant and the explicit link masses.
+
+The uncertainty envelope in `nominal_model.yaml` covers mass scale, COM offset,
+friction/breakaway scale, actuator time constant, feedback delay, and payload
+mass. Evaluate the nominal model and its envelope with:
+
+```bash
+python scripts/evaluate_nominal_model.py
+```
+
+The report is written to `results/nominal_model_evaluation.json`.
+
+### Controller modes
+
+The default `pd` mode computes PD plus gravity, friction, and breakaway
+feedforward. The `impedance` mode uses inverse-dynamics joint impedance:
+
+```text
+tau = M(q) * ddq_d + C(q, dq) + g(q)
+      + Kp * e + Kd * de + friction
+```
+
+Start the impedance controller in simulation with:
+
+```bash
+ros2 launch jgarm_bringup sim.launch.py controller_mode:=impedance
+```
+
+The impedance mode requires `gravity_model:=physical`. It has been verified in
+simulation to hold the power-on pose; real-machine validation is still pending.
+
+The C++ plant has a startup hold enabled by `startup_hold_enabled: true` in
+[sim.yaml](ros2_ws/src/jgarm_bringup/config/sim.yaml). Before the first effort
+command arrives, it applies the MuJoCo `qfrc_bias` torque, so the arm does not
+fall while the Python controller is still starting. This removes the startup
+catch that previously excited J4/J6 at power-on.
+
+For a gravity-compensated drag-teaching window:
+
+```bash
+python scripts/drag_teach.py
+```
+
+This is a standalone MuJoCo window with zero stiffness and joint damping. The
+ROS viewer remains a display-only `/joint_states` consumer.
+
+### Numpad TCP teleoperation
+
+Use the numeric keypad to move the TCP by small Cartesian steps. The script
+uses KDL FK for the current TCP pose and damped KDL differential IK for each
+step:
+
+```bash
+export ROS_DOMAIN_ID=93
+python scripts/ros2_numpad_tcp_teleop.py --step 0.005 --output joint
+```
+
+With NumLock on, use `8/2` for x, `4/6` for y, `9/3` for z; `0` resets the
+target to the measured TCP and `q` quits. With NumLock off, the arrow and
+PageUp/PageDown keys provide the same directions. `--output pose` publishes a
+pose target instead of the KDL joint target.
+
+### TCP tracking and trail
+
+The viewport publishes the measured `tcp` site pose in the MuJoCo world frame
+on `/arm/tcp_pose` (up to 30 Hz; about 25 Hz with the default render loop) and
+draws a fading trail of its recent positions. The current TCP is the larger
+orange sphere:
+
+```bash
+ros2 topic echo /arm/tcp_pose --once
+```
+
+The trail keeps 300 points sampled every 20 ms, with a 1 mm minimum step.
+The `arm_viewer_node` parameters `tcp_trail_points`, `tcp_trail_period_s`,
+`tcp_trail_min_step_m`, and `tcp_publish_rate_hz` tune the sampling and publish
+rate; set them in `sim.launch.py`. Disable the drawing with
+`ros2 launch jgarm_bringup sim.launch.py tcp_trail:=false`.
+
+### Verification curves
+
+Record target, actual position, and torque components from a running
+simulation:
+
+```bash
+python scripts/record_control_curves.py --label pd \
+  --output results/control_curves_pd.csv
+python scripts/plot_control_curves.py \
+  --input pd=results/control_curves_pd.csv --joint 2
+```
+
+Use `--profile sine` and `--amplitude-rad`/`--frequency-hz` to exercise the
+impedance acceleration feedforward. `breakaway_enabled:=false` isolates
+gravity/friction/impedance from the large low-speed breakaway term. Run tests
+on an isolated `ROS_DOMAIN_ID` if another full simulation is already open.
+
+For a stepped-sine bandwidth check:
+
+```bash
+python scripts/record_control_curves.py --label impedance \
+  --profile sweep --output results/control_sweep_impedance.csv \
+  --frequencies 0.5,1.0,2.0,3.0 --dwell 3.0
+python scripts/analyze_frequency_sweep.py \
+  --input pd=results/control_sweep_pd.csv \
+  --input impedance=results/control_sweep_impedance.csv
+```
+
+## Offline identification
+
+The gravity, friction, and breakaway parameters can be re-identified from
+recorded joint states and torques:
+
+```bash
+python scripts/identify_hardware_profile.py \
+  --csv results/arm_identification.csv \
+  --output results/identified_hardware_profile.yaml
+```
+
+The input columns, experiment procedure, and model limitations are documented
+in [parameter_identification.md](docs/parameter_identification.md). The tool
+writes a reviewable YAML fragment and a JSON residual report; it does not
+overwrite the active profile automatically.
+
 ## Environment
 
 The ROS 2 runtime uses ROS 2 Jazzy with system Python 3.12. A project-local
 `.ros-venv` adds MuJoCo, Pinocchio, and URDF parsing without mixing in the
-legacy Python 3.10 environment.
+legacy Python 3.10 environment. The ROS 2 runtime uses MuJoCo 3.17.0, matching
+the default C++ SDK. The legacy Python 3.10 environment remains pinned to
+MuJoCo 3.8.1 for the older algorithm tests and is not used by the ROS 2
+runtime.
 
 The default C++ SDK path is `/sim-workspaces/mujoco-3.17.0`. Override it
 before building with `export MUJOCO_ROOT=/path/to/mujoco`.
@@ -135,8 +273,9 @@ length. Keep units locked with:
 ros2 launch jgarm_bringup sim.launch.py draggable_units:=false
 ```
 
-The MuJoCo viewer process subscribes to `/joint_states` and updates the
-display continuously without running a second physics simulation.
+The MuJoCo viewer process subscribes to `/joint_states` and renders the current
+joint state. It advances its local physics only while a released energy unit is
+free; the C++ node remains the authority for arm dynamics.
 
 ## Task scene
 
@@ -208,23 +347,25 @@ Each torque plot shows:
 - `actual`: torque reported by MuJoCo in `/joint_states[].effort`;
 - `command`: the clipped torque sent to MuJoCo;
 - `PD`: the proportional and derivative contribution;
-- `gravity`: the identified reATRM gravity feedforward contribution.
+- `gravity`: the active controller gravity feedforward (physical by default,
+  reATRM empirical when selected);
 - `friction`: the identified velocity-friction compensation;
 - `breakaway`: the identified low-speed breakaway compensation.
 
 The numeric table adds:
 
 - `MuJoCo`: the hardware-profile load used by the simulator;
-- `Gravity`: the same hardware-profile gravity model used by the controller;
+- `Gravity`: the active controller gravity model;
 - `PD`: the proportional and derivative contribution;
 - `Hold`: the total torque command used to hold the arm;
 - actual actuator torque remains visible in the plot.
 
 Use `Power-on pose` to return to the real power-on posture and `URDF zero` to
 move smoothly to the all-zero URDF posture. At URDF zero, the table normally
-shows approximately `-17.651 N·m` on J2, `-14.157 N·m` on J3, and
-`+2.760 N·m` on J5 even
-though every joint angle is zero. This confirms that gravity is still active.
+shows approximately `-3.545 N·m` on J2, `-3.544 N·m` on J3, and
+`+0.527 N·m` on J5 with the physical model. Launching with
+`gravity_model:=empirical` restores the reATRM polynomial values
+(`-17.651`, `-14.157`, `+2.760`). Both confirm that gravity is still active.
 
 `Apply PD` updates all Kp/Kd values and the gravity switch atomically.
 `Hold current` plans a short move back to the measured pose. `Disable drive`
@@ -241,7 +382,10 @@ above on a server or in automated tests.
 /joint_states                    sensor_msgs/JointState
 /arm/control/joint_state         sensor_msgs/JointState (500 Hz internal)
 /arm/target/joint_position       std_msgs/Float64MultiArray
+/arm/target/joint_velocity       std_msgs/Float64MultiArray
+/arm/target/joint_acceleration   std_msgs/Float64MultiArray
 /arm/target/pose                 geometry_msgs/PoseStamped
+/arm/tcp_pose                    geometry_msgs/PoseStamped (world frame)
 /arm/control/effort_cmd          std_msgs/Float64MultiArray
 /arm/debug/pd_effort             std_msgs/Float64MultiArray
 /arm/debug/gravity_effort        std_msgs/Float64MultiArray

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import mujoco
 import numpy as np
+import pinocchio
 from scipy.spatial.transform import Rotation
 
 from jgarm_sim import MuJoCoArmBackend
+from jgarm_sim.dynamics import PinocchioDynamics
 from jgarm_sim.kinematics import IKOptions, Kinematics
 
 
@@ -49,6 +51,81 @@ def test_kdl_fk_matches_mujoco_tcp() -> None:
 
     assert max_position_error < 1e-5
     assert max_rotation_error < 1e-4
+
+
+def test_kdl_fk_matches_pinocchio() -> None:
+    kinematics = Kinematics()
+    dynamics = PinocchioDynamics()
+    frame_id = dynamics.model.getFrameId("link_6")
+    random = np.random.default_rng(13)
+    max_position_error = 0.0
+    max_rotation_error = 0.0
+    for _ in range(50):
+        joints = random.uniform(
+            kinematics.joint_limits_rad[:, 0],
+            kinematics.joint_limits_rad[:, 1],
+        )
+        kdl_pose = kinematics.forward(joints)
+        pinocchio.framesForwardKinematics(
+            dynamics.model,
+            dynamics.data,
+            joints,
+        )
+        pinocchio.updateFramePlacements(
+            dynamics.model,
+            dynamics.data,
+        )
+        pin_pose = np.asarray(
+            dynamics.data.oMf[frame_id].homogeneous,
+            dtype=np.float64,
+        ).copy()
+        max_position_error = max(
+            max_position_error,
+            float(np.linalg.norm(kdl_pose[:3, 3] - pin_pose[:3, 3])),
+        )
+        max_rotation_error = max(
+            max_rotation_error,
+            float(
+                Rotation.from_matrix(
+                    kdl_pose[:3, :3] @ pin_pose[:3, :3].T
+                ).magnitude()
+            ),
+        )
+    assert max_position_error < 1e-5
+    assert max_rotation_error < 1e-4
+
+
+def test_ik_solution_matches_pinocchio_fk() -> None:
+    kinematics = Kinematics()
+    dynamics = PinocchioDynamics()
+    frame_id = dynamics.model.getFrameId("link_6")
+    target_joints = np.array([0.1, -0.8, 0.8, 0.1, 0.3, -0.1])
+    target_pose = kinematics.forward(target_joints)
+    ik = kinematics.inverse(
+        target_pose,
+        np.zeros(6),
+        IKOptions(max_attempts=5),
+    )
+    assert ik.success
+    pinocchio.framesForwardKinematics(
+        dynamics.model,
+        dynamics.data,
+        ik.position_rad,
+    )
+    pinocchio.updateFramePlacements(
+        dynamics.model,
+        dynamics.data,
+    )
+    pin_pose = np.asarray(
+        dynamics.data.oMf[frame_id].homogeneous,
+        dtype=np.float64,
+    ).copy()
+    position_error = np.linalg.norm(target_pose[:3, 3] - pin_pose[:3, 3])
+    rotation_error = Rotation.from_matrix(
+        target_pose[:3, :3] @ pin_pose[:3, :3].T
+    ).magnitude()
+    assert position_error < 1e-4
+    assert rotation_error < 1e-4
 
 
 def test_kdl_jacobian_matches_finite_difference() -> None:

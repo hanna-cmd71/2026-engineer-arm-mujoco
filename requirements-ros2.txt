@@ -1,4 +1,6 @@
-mujoco==3.8.1
+mujoco==3.17.0
+websockets>=13
+pyyaml>=6.0
 pin==4.1.0
 urdf-parser-py==0.0.4
 scipy==1.18.1

@@ -1,0 +1,15 @@
+# Nominal arm model used when no fresh real-machine identification is available.
+# Mass, center of mass, and inertia come from JGarm.urdf. The uncertainty block
+# is the envelope to sweep before trajectory optimisation.
+nominal_model:
+  source_urdf: JGarm.urdf
+  gravity_model: physical
+  hardware_profile: ros2_ws/src/jgarm_bringup/config/hardware_profile.yaml
+  uncertainty:
+    mass_scale: [0.9, 1.1]
+    com_offset_m: [-0.005, 0.005]
+    friction_scale: [0.7, 1.3]
+    breakaway_scale: [0.5, 1.5]
+    actuator_time_constant_s: [0.002, 0.010]
+    feedback_delay_s: [0.0, 0.02]
+    payload_mass_kg: [0.0, 0.5]

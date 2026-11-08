@@ -34,7 +34,11 @@ if(NOT EXISTS "${MUJOCO_LIBRARY}")
 endif()
 
 add_executable(mujoco_sim_node src/mujoco_sim_node.cpp)
-target_include_directories(mujoco_sim_node PRIVATE "${MUJOCO_INCLUDE_DIR}")
+target_include_directories(
+  mujoco_sim_node
+  PRIVATE
+    "${MUJOCO_INCLUDE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(mujoco_sim_node "${MUJOCO_LIBRARY}")
 set_target_properties(
   mujoco_sim_node
@@ -53,4 +57,15 @@ ament_target_dependencies(
   tf2_ros)
 
 install(TARGETS mujoco_sim_node DESTINATION lib/${PROJECT_NAME})
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(
+    test_hardware_profile
+    test/test_hardware_profile.cpp)
+  target_include_directories(
+    test_hardware_profile
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+endif()
+
 ament_package()

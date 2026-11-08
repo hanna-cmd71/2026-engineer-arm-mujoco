@@ -121,6 +121,19 @@ class Kinematics:
             raise RuntimeError(f"KDL FK failed with status {status}")
         return self._from_kdl_frame(frame)
 
+    def jacobian(self, q) -> np.ndarray:
+        """Returns the 6x6 spatial Jacobian in the KDL base frame."""
+        joints = self._to_jnt_array(self._coerce_joints(q))
+        jacobian = kdl.Jacobian(JOINT_COUNT)
+        status = self._jacobian_solver.JntToJac(joints, jacobian)
+        if status < 0:
+            raise RuntimeError(f"KDL Jacobian failed with status {status}")
+        result = np.zeros((6, JOINT_COUNT), dtype=np.float64)
+        for row in range(6):
+            for column in range(JOINT_COUNT):
+                result[row, column] = jacobian[row, column]
+        return result
+
     def pose_error(
         self, target: np.ndarray, actual: np.ndarray
     ) -> tuple[float, float]:

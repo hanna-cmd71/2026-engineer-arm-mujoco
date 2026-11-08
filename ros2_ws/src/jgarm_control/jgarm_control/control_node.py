@@ -17,7 +17,12 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
 from std_srvs.srv import SetBool
 
-from jgarm_control.controller import PDGains, PDGravityController
+from jgarm_control.controller import (
+    JointImpedanceController,
+    PDGains,
+    PDGravityController,
+)
+from jgarm_control.dynamics import PinocchioDynamics
 from jgarm_control.hardware_profile import EngineerHardwareProfile
 from jgarm_control.kinematics import IKOptions, Kinematics
 from jgarm_control.types import (
@@ -69,12 +74,46 @@ class ArmControlNode(Node):
         gravity_enabled = bool(
             self.declare_parameter("gravity_enabled", True).value
         )
+        breakaway_enabled = bool(
+            self.declare_parameter("breakaway_enabled", True).value
+        )
+        friction_enabled = bool(
+            self.declare_parameter("friction_enabled", True).value
+        )
+        impedance_kp_scale = np.asarray(
+            self.declare_parameter(
+                "impedance_kp_scale",
+                [3.0, 3.0, 3.0, 1.0, 3.0, 1.0],
+            ).value,
+            dtype=np.float64,
+        ).reshape(-1)
+        impedance_kd_scale = np.asarray(
+            self.declare_parameter(
+                "impedance_kd_scale",
+                [3.0, 3.0, 3.0, 2.0, 3.0, 2.0],
+            ).value,
+            dtype=np.float64,
+        ).reshape(-1)
         control_rate_hz = float(
             self.declare_parameter("control_rate_hz", 500.0).value
         )
         self._state_timeout_s = float(
             self.declare_parameter("state_timeout_s", 0.2).value
         )
+        gravity_model = str(
+            self.declare_parameter("gravity_model", "physical").value
+        )
+        if gravity_model not in ("physical", "empirical"):
+            raise ValueError("gravity_model must be physical or empirical")
+        controller_mode = str(
+            self.declare_parameter("controller_mode", "pd").value
+        )
+        if controller_mode not in ("pd", "impedance"):
+            raise ValueError("controller_mode must be pd or impedance")
+        if controller_mode == "impedance" and gravity_model != "physical":
+            raise ValueError(
+                "impedance control requires physical gravity"
+            )
         if not np.isfinite(control_rate_hz) or control_rate_hz <= 0.0:
             raise ValueError("control_rate_hz must be finite and positive")
         if (
@@ -86,12 +125,35 @@ class ArmControlNode(Node):
         self.kinematics = Kinematics(urdf_path)
         hardware_profile = self._load_hardware_profile()
         self.hardware_profile = hardware_profile
-        self.controller = PDGravityController(
-            PDGains(np.asarray(kp), np.asarray(kd)),
-            hardware_profile.effort_limits_nm,
-            gravity_enabled=gravity_enabled,
-            hardware_profile=hardware_profile,
+        dynamics = PinocchioDynamics(urdf_path)
+        gravity_torque = (
+            dynamics.gravity_torque
+            if gravity_model == "physical"
+            else hardware_profile.gravity_torque
         )
+        gains = PDGains(np.asarray(kp), np.asarray(kd))
+        if controller_mode == "impedance":
+            self.controller = JointImpedanceController(
+                gains,
+                hardware_profile.effort_limits_nm,
+                dynamics,
+                gravity_enabled=gravity_enabled,
+                hardware_profile=hardware_profile,
+                breakaway_enabled=breakaway_enabled,
+                friction_enabled=friction_enabled,
+                kp_scale=impedance_kp_scale,
+                kd_scale=impedance_kd_scale,
+            )
+        else:
+            self.controller = PDGravityController(
+                gains,
+                hardware_profile.effort_limits_nm,
+                gravity_torque=gravity_torque,
+                gravity_enabled=gravity_enabled,
+                hardware_profile=hardware_profile,
+                breakaway_enabled=breakaway_enabled,
+                friction_enabled=friction_enabled,
+            )
         target_position = vector6(
             self.declare_parameter(
                 "target_position", list(POWER_ON_POSITION_RAD)
@@ -104,6 +166,8 @@ class ArmControlNode(Node):
             self.kinematics.joint_limits_rad[:, 1],
         )
         self._target_velocity = np.zeros(JOINT_COUNT)
+        self._target_acceleration = np.zeros(JOINT_COUNT)
+        self._target_acceleration_time = 0.0
         self._latest_state: JointFeedback | None = None
         self._latest_state_time = 0.0
         self._current_position = np.zeros(JOINT_COUNT)
@@ -130,6 +194,12 @@ class ArmControlNode(Node):
             Float64MultiArray,
             "/arm/target/joint_velocity",
             self._joint_velocity_callback,
+            10,
+        )
+        self.create_subscription(
+            Float64MultiArray,
+            "/arm/target/joint_acceleration",
+            self._joint_acceleration_callback,
             10,
         )
         self.create_subscription(
@@ -161,7 +231,8 @@ class ArmControlNode(Node):
         self.create_timer(1.0 / control_rate_hz, self._control_step)
         self.get_logger().info(
             f"Arm control started at {control_rate_hz:.0f} Hz with "
-            f"profile {hardware_profile.profile_id}"
+            f"profile {hardware_profile.profile_id}, {controller_mode} "
+            f"controller, {gravity_model} gravity"
         )
 
     def _load_hardware_profile(self) -> EngineerHardwareProfile:
@@ -359,6 +430,10 @@ class ArmControlNode(Node):
         kp = self.get_parameter("kp").value
         kd = self.get_parameter("kd").value
         gravity_enabled = self.get_parameter("gravity_enabled").value
+        breakaway_enabled = self.get_parameter(
+            "breakaway_enabled"
+        ).value
+        friction_enabled = self.get_parameter("friction_enabled").value
         for parameter in parameters:
             if parameter.name == "kp":
                 kp = parameter.value
@@ -371,12 +446,28 @@ class ArmControlNode(Node):
                         reason="gravity_enabled must be a boolean",
                     )
                 gravity_enabled = parameter.value
+            elif parameter.name == "breakaway_enabled":
+                if not isinstance(parameter.value, bool):
+                    return SetParametersResult(
+                        successful=False,
+                        reason="breakaway_enabled must be a boolean",
+                    )
+                breakaway_enabled = parameter.value
+            elif parameter.name == "friction_enabled":
+                if not isinstance(parameter.value, bool):
+                    return SetParametersResult(
+                        successful=False,
+                        reason="friction_enabled must be a boolean",
+                    )
+                friction_enabled = parameter.value
         try:
             gains = PDGains(np.asarray(kp), np.asarray(kd))
         except (TypeError, ValueError) as error:
             return SetParametersResult(successful=False, reason=str(error))
         self.controller.set_gains(gains)
         self.controller.set_gravity_enabled(bool(gravity_enabled))
+        self.controller.set_breakaway_enabled(bool(breakaway_enabled))
+        self.controller.set_friction_enabled(bool(friction_enabled))
         return SetParametersResult(successful=True)
 
     def _joint_velocity_callback(
@@ -391,24 +482,49 @@ class ArmControlNode(Node):
         if np.all(np.isfinite(target)):
             self._target_velocity = target
 
+    def _joint_acceleration_callback(
+        self, message: Float64MultiArray
+    ) -> None:
+        if len(message.data) != JOINT_COUNT:
+            self.get_logger().warning(
+                "Joint acceleration target must contain six values"
+            )
+            return
+        target = np.asarray(message.data, dtype=np.float64)
+        if np.all(np.isfinite(target)):
+            self._target_acceleration = target
+            self._target_acceleration_time = time.monotonic()
+
     def _pose_target_callback(self, message: PoseStamped) -> None:
         if message.header.frame_id not in ("", "base_link"):
             self.get_logger().warning(
                 "Pose target frame must be base_link"
             )
             return
-        target = np.eye(4)
-        target[:3, :3] = _quaternion_matrix(
-            message.pose.orientation.x,
-            message.pose.orientation.y,
-            message.pose.orientation.z,
-            message.pose.orientation.w,
+        pose = message.pose
+        position = np.array(
+            [pose.position.x, pose.position.y, pose.position.z],
+            dtype=np.float64,
         )
-        target[:3, 3] = [
-            message.pose.position.x,
-            message.pose.position.y,
-            message.pose.position.z,
-        ]
+        quaternion = np.array(
+            [
+                pose.orientation.x,
+                pose.orientation.y,
+                pose.orientation.z,
+                pose.orientation.w,
+            ],
+            dtype=np.float64,
+        )
+        if not np.all(np.isfinite(position)) or not np.all(
+            np.isfinite(quaternion)
+        ):
+            self.get_logger().warning(
+                "Pose target contains non-finite values"
+            )
+            return
+        target = np.eye(4)
+        target[:3, :3] = _quaternion_matrix(*quaternion)
+        target[:3, 3] = position
         result = self.kinematics.inverse(
             target,
             self._target_position,
@@ -417,6 +533,8 @@ class ArmControlNode(Node):
         if result.success:
             self._target_position = result.position_rad
             self._target_velocity = np.zeros(JOINT_COUNT)
+            self._target_acceleration = np.zeros(JOINT_COUNT)
+            self._target_acceleration_time = 0.0
             self.get_logger().info(
                 "Pose IK accepted: "
                 f"position_error={result.position_error_m:.6e} m"
@@ -432,10 +550,17 @@ class ArmControlNode(Node):
             self._publish_command(self.controller.safe_stop())
             return
         if self._enabled:
+            acceleration = (
+                self._target_acceleration
+                if time.monotonic() - self._target_acceleration_time
+                <= self._state_timeout_s
+                else np.zeros(JOINT_COUNT)
+            )
             command = self.controller.compute(
                 self._latest_state,
                 self._target_position,
                 self._target_velocity,
+                acceleration,
             )
         else:
             command = self.controller.safe_stop()

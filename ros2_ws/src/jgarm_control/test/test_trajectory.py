@@ -63,6 +63,38 @@ class JointTrajectoryTest(unittest.TestCase):
                 sample_count=2.5,
             )
 
+    def test_hermite_acceleration_matches_finite_difference(self) -> None:
+        trajectory = JointTrajectory(
+            np.array([0.0, 1.0]),
+            np.array(
+                [[0.0] * 6, [0.4, -0.3, 0.2, -0.1, 0.3, -0.2]]
+            ),
+            np.array(
+                [
+                    [0.1, 0.0, -0.1, 0.0, 0.1, 0.0],
+                    [0.0, 0.2, 0.0, -0.2, 0.0, 0.1],
+                ]
+            ),
+        )
+        time = 0.37
+        step = 1e-6
+        _, _, acceleration = trajectory.sample_with_acceleration(time)
+        _, velocity_before = trajectory.sample(time - step)
+        _, velocity_after = trajectory.sample(time + step)
+        numerical = (velocity_after - velocity_before) / (2.0 * step)
+        np.testing.assert_allclose(acceleration, numerical, atol=1e-5)
+
+    def test_acceleration_is_zero_at_endpoints(self) -> None:
+        trajectory = JointTrajectory(
+            np.array([0.0, 1.0]),
+            np.zeros((2, 6)),
+            np.zeros((2, 6)),
+        )
+        _, _, start_acceleration = trajectory.sample_with_acceleration(0.0)
+        _, _, end_acceleration = trajectory.sample_with_acceleration(1.0)
+        np.testing.assert_allclose(start_acceleration, 0.0)
+        np.testing.assert_allclose(end_acceleration, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,13 +21,14 @@ setup(
     maintainer_email="2628165913@qq.com",
     description="KDL and Pinocchio controller for JGarm",
     license="Proprietary",
-        entry_points={
-            "console_scripts": [
-                "control_node = jgarm_control.control_node:main",
-                "dashboard_node = jgarm_control.dashboard_node:main",
-                "trajectory_bridge_node = jgarm_control.trajectory_bridge_node:main",
-                "viewer_node = jgarm_control.viewer_node:main",
-                "wasd_teleop_node = jgarm_control.wasd_teleop_node:main",
-            ],
-        },
+    entry_points={
+        "console_scripts": [
+            "control_node = jgarm_control.control_node:main",
+            "dashboard_node = jgarm_control.dashboard_node:main",
+            "trajectory_bridge_node = "
+            "jgarm_control.trajectory_bridge_node:main",
+            "viewer_node = jgarm_control.viewer_node:main",
+            "wasd_teleop_node = jgarm_control.wasd_teleop_node:main",
+        ],
+    },
 )

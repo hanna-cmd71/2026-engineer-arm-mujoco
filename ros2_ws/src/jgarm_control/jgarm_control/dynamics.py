@@ -12,9 +12,13 @@ from jgarm_control.types import JOINT_COUNT, vector6
 
 class PinocchioDynamics:
     def __init__(self, urdf_path: str | Path) -> None:
-        self.model = pinocchio.buildModelFromUrdf(str(Path(urdf_path).resolve()))
+        self.model = pinocchio.buildModelFromUrdf(
+            str(Path(urdf_path).resolve())
+        )
         if self.model.nq != JOINT_COUNT or self.model.nv != JOINT_COUNT:
-            raise ValueError("Pinocchio model must be fixed-base with six joints")
+            raise ValueError(
+                "Pinocchio model must be fixed-base with six joints"
+            )
         self.data = self.model.createData()
         self.model.gravity.linear = np.array([0.0, 0.0, -9.81])
 
@@ -24,3 +28,28 @@ class PinocchioDynamics:
             self.model, self.data, joints
         )
         return np.asarray(torque, dtype=np.float64)
+
+    def mass_matrix(self, q) -> np.ndarray:
+        """Returns the symmetric joint-space mass matrix."""
+        joints = vector6(q, "q")
+        matrix = np.asarray(
+            pinocchio.crba(self.model, self.data, joints),
+            dtype=np.float64,
+        )
+        return np.triu(matrix) + np.triu(matrix, 1).T
+
+    def coriolis_torque(self, q, dq) -> np.ndarray:
+        """Returns the Coriolis/centrifugal torque C(q, dq) * dq."""
+        joints = vector6(q, "q")
+        velocities = vector6(dq, "dq")
+        total = pinocchio.rnea(
+            self.model,
+            self.data,
+            joints,
+            velocities,
+            np.zeros(JOINT_COUNT),
+        )
+        return np.asarray(
+            total - self.gravity_torque(joints),
+            dtype=np.float64,
+        )

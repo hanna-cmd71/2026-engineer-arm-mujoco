@@ -23,14 +23,18 @@ def generate_launch_description() -> LaunchDescription:
     dashboard = LaunchConfiguration("dashboard")
     show_frames = LaunchConfiguration("show_frames")
     draggable_units = LaunchConfiguration("draggable_units")
+    tcp_trail = LaunchConfiguration("tcp_trail")
+    controller_mode = LaunchConfiguration("controller_mode")
+    gravity_model = LaunchConfiguration("gravity_model")
+    breakaway_enabled = LaunchConfiguration("breakaway_enabled")
+    friction_enabled = LaunchConfiguration("friction_enabled")
+    plant_friction_enabled = LaunchConfiguration("plant_friction_enabled")
+    hardware_profile = LaunchConfiguration("hardware_profile_path")
     control_config = PathJoinSubstitution(
         [FindPackageShare("jgarm_bringup"), "config", "control.yaml"]
     )
     sim_config = PathJoinSubstitution(
         [FindPackageShare("jgarm_bringup"), "config", "sim.yaml"]
-    )
-    hardware_profile = PathJoinSubstitution(
-        [FindPackageShare("jgarm_bringup"), "config", "hardware_profile.yaml"]
     )
 
     return LaunchDescription(
@@ -60,6 +64,47 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="true",
                 description="Release a magnetic constraint when selecting a unit.",
             ),
+            DeclareLaunchArgument(
+                "tcp_trail",
+                default_value="true",
+                description="Draw the TCP history trail in the viewer.",
+            ),
+            DeclareLaunchArgument(
+                "controller_mode",
+                default_value="pd",
+                description="Arm controller mode: pd or impedance.",
+            ),
+            DeclareLaunchArgument(
+                "gravity_model",
+                default_value="physical",
+                description="Gravity model: physical or empirical.",
+            ),
+            DeclareLaunchArgument(
+                "breakaway_enabled",
+                default_value="true",
+                description="Enable low-speed breakaway compensation.",
+            ),
+            DeclareLaunchArgument(
+                "friction_enabled",
+                default_value="true",
+                description="Enable controller friction compensation.",
+            ),
+            DeclareLaunchArgument(
+                "plant_friction_enabled",
+                default_value="true",
+                description="Enable MuJoCo plant friction.",
+            ),
+            DeclareLaunchArgument(
+                "hardware_profile_path",
+                default_value=PathJoinSubstitution(
+                    [
+                        FindPackageShare("jgarm_bringup"),
+                        "config",
+                        "hardware_profile.yaml",
+                    ]
+                ),
+                description="Hardware profile YAML path.",
+            ),
             Node(
                 package="jgarm_sim_cpp",
                 executable="mujoco_sim_node",
@@ -68,7 +113,15 @@ def generate_launch_description() -> LaunchDescription:
                 parameters=[
                     hardware_profile,
                     sim_config,
-                    {"model_path": str(model_path)},
+                    {
+                        "model_path": str(model_path),
+                        "hardware_profile.plant_friction_enabled": (
+                            ParameterValue(
+                                plant_friction_enabled,
+                                value_type=bool,
+                            )
+                        ),
+                    },
                 ],
             ),
             Node(
@@ -79,7 +132,19 @@ def generate_launch_description() -> LaunchDescription:
                 parameters=[
                     hardware_profile,
                     control_config,
-                    {"urdf_path": str(urdf_path)},
+                    {
+                        "urdf_path": str(urdf_path),
+                        "controller_mode": controller_mode,
+                        "gravity_model": gravity_model,
+                        "breakaway_enabled": ParameterValue(
+                            breakaway_enabled,
+                            value_type=bool,
+                        ),
+                        "friction_enabled": ParameterValue(
+                            friction_enabled,
+                            value_type=bool,
+                        ),
+                    },
                 ],
             ),
             Node(
@@ -125,6 +190,10 @@ def generate_launch_description() -> LaunchDescription:
                         ),
                         "draggable_energy_units": ParameterValue(
                             draggable_units,
+                            value_type=bool,
+                        ),
+                        "tcp_trail_enabled": ParameterValue(
+                            tcp_trail,
                             value_type=bool,
                         ),
                     }

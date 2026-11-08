@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from pathlib import Path
 
+from geometry_msgs.msg import PoseStamped
 import mujoco
 from ament_index_python.packages import get_package_share_directory
 from mujoco import viewer as mujoco_viewer
@@ -12,15 +14,22 @@ from nav_msgs.msg import Odometry
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import JointState
 
+from jgarm_control.energy_units import EnergyUnitExtractor
 from jgarm_control.types import JOINT_NAMES
 
 
 class ArmViewerNode(Node):
-    def __init__(self) -> None:
-        super().__init__("arm_viewer_node")
+    def __init__(
+        self, parameter_overrides: list[Parameter] | None = None
+    ) -> None:
+        super().__init__(
+            "arm_viewer_node",
+            parameter_overrides=parameter_overrides,
+        )
         description_share = Path(
             get_package_share_directory("jgarm_description")
         )
@@ -96,63 +105,69 @@ class ArmViewerNode(Node):
             ],
             dtype=np.int32,
         )
-        self._energy_unit_equalities = {}
-        self._energy_unit_qpos_addresses = {}
-        self._energy_unit_dof_addresses = {}
-        self._energy_unit_extraction_distances = {}
-        for index in range(1, 7):
-            body_id = mujoco.mj_name2id(
-                self.model,
-                mujoco.mjtObj.mjOBJ_BODY,
-                f"energy_unit_{index:02d}",
-            )
-            equality_id = mujoco.mj_name2id(
-                self.model,
-                mujoco.mjtObj.mjOBJ_EQUALITY,
-                f"storage_magnet_{index:02d}",
-            )
-            if body_id >= 0 and equality_id >= 0:
-                self._energy_unit_equalities[body_id] = equality_id
-                joint_id = mujoco.mj_name2id(
-                    self.model,
-                    mujoco.mjtObj.mjOBJ_JOINT,
-                    f"energy_unit_{index:02d}_free",
+        self._energy_units = EnergyUnitExtractor(
+            self.model,
+            self.data,
+            lateral_clearance_m=float(
+                self.declare_parameter(
+                    "extraction_lateral_clearance_m",
+                    0.01,
+                ).value
+            ),
+            angular_clearance_rad=np.deg2rad(
+                float(
+                    self.declare_parameter(
+                        "extraction_angular_clearance_deg",
+                        10.0,
+                    ).value
                 )
-                if joint_id >= 0:
-                    self._energy_unit_qpos_addresses[body_id] = int(
-                        self.model.jnt_qposadr[joint_id]
-                    )
-                    self._energy_unit_dof_addresses[body_id] = int(
-                        self.model.jnt_dofadr[joint_id]
-                    )
-                    top_site_id = mujoco.mj_name2id(
-                        self.model,
-                        mujoco.mjtObj.mjOBJ_SITE,
-                        f"storage_post_{index:02d}_top",
-                    )
-                    self._energy_unit_extraction_distances[body_id] = (
-                        2.0 * float(self.model.site_pos[top_site_id, 2])
-                    )
-        self._extraction_initial_poses: dict[
-            int,
-            tuple[np.ndarray, np.ndarray, np.ndarray],
-        ] = {}
-        self._pulling_energy_units: set[int] = set()
-        self._released_energy_units: set[int] = set()
-        self._collision_pending_energy_units: set[int] = set()
-        self._extraction_lateral_clearance_m = float(
-            self.declare_parameter(
-                "extraction_lateral_clearance_m",
-                0.01,
-            ).value
+            ),
+            log=self.get_logger().info,
         )
-        self._extraction_angular_clearance_rad = np.deg2rad(
+        self._tcp_site_id = mujoco.mj_name2id(
+            self.model,
+            mujoco.mjtObj.mjOBJ_SITE,
+            "tcp",
+        )
+        if self._tcp_site_id < 0:
+            raise ValueError("MuJoCo model is missing the tcp site")
+        self._tcp_trail_enabled = bool(
+            self.declare_parameter("tcp_trail_enabled", True).value
+        )
+        self._tcp_trail_points = max(
+            1,
+            int(self.declare_parameter("tcp_trail_points", 300).value),
+        )
+        self._tcp_trail_period_s = max(
+            1e-3,
+            float(
+                self.declare_parameter("tcp_trail_period_s", 0.02).value
+            ),
+        )
+        self._tcp_trail_min_step_m = max(
+            0.0,
             float(
                 self.declare_parameter(
-                    "extraction_angular_clearance_deg",
-                    10.0,
+                    "tcp_trail_min_step_m",
+                    0.001,
                 ).value
-            )
+            ),
+        )
+        self._tcp_publish_period_s = 1.0 / max(
+            1.0,
+            float(
+                self.declare_parameter("tcp_publish_rate_hz", 30.0).value
+            ),
+        )
+        self._tcp_trail: deque[np.ndarray] = deque(
+            maxlen=self._tcp_trail_points
+        )
+        self._last_tcp_trail_time = -np.inf
+        self._last_tcp_publish_time = -np.inf
+        self._tcp_pose_publisher = self.create_publisher(
+            PoseStamped,
+            "/arm/tcp_pose",
+            10,
         )
         self._steps_per_render = max(
             1,
@@ -180,38 +195,102 @@ class ArmViewerNode(Node):
     def _odometry_callback(self, message: Odometry) -> None:
         self._latest_odometry = message
 
+    def tcp_pose(self) -> np.ndarray:
+        """Returns the TCP site pose as a 4x4 world-frame matrix."""
+        pose = np.eye(4, dtype=np.float64)
+        pose[:3, :3] = self.data.site_xmat[self._tcp_site_id].reshape(3, 3)
+        pose[:3, 3] = self.data.site_xpos[self._tcp_site_id]
+        return pose
+
+    def _publish_tcp_pose(self) -> None:
+        pose = self.tcp_pose()
+        quaternion = np.empty(4, dtype=np.float64)
+        mujoco.mju_mat2Quat(
+            quaternion,
+            self.data.site_xmat[self._tcp_site_id],
+        )
+        message = PoseStamped()
+        message.header.stamp = self.get_clock().now().to_msg()
+        message.header.frame_id = "world"
+        message.pose.position.x = float(pose[0, 3])
+        message.pose.position.y = float(pose[1, 3])
+        message.pose.position.z = float(pose[2, 3])
+        message.pose.orientation.x = float(quaternion[1])
+        message.pose.orientation.y = float(quaternion[2])
+        message.pose.orientation.z = float(quaternion[3])
+        message.pose.orientation.w = float(quaternion[0])
+        self._tcp_pose_publisher.publish(message)
+
+    def update_tcp_visualization(
+        self,
+        mj_viewer,
+        now: float | None = None,
+    ) -> None:
+        """Publishes the TCP pose and draws its trail in the viewer."""
+        current_time = time.monotonic() if now is None else float(now)
+        if (
+            current_time - self._last_tcp_publish_time
+            >= self._tcp_publish_period_s
+        ):
+            self._publish_tcp_pose()
+            self._last_tcp_publish_time = current_time
+        position = self.tcp_pose()[:3, 3].copy()
+        if (
+            self._tcp_trail_enabled
+            and current_time - self._last_tcp_trail_time
+            >= self._tcp_trail_period_s
+        ):
+            if (
+                not self._tcp_trail
+                or np.linalg.norm(position - self._tcp_trail[-1])
+                >= self._tcp_trail_min_step_m
+            ):
+                self._tcp_trail.append(position)
+            self._last_tcp_trail_time = current_time
+        scene = mj_viewer.user_scn
+        scene.ngeom = 0
+        trail_capacity = max(0, int(scene.maxgeom) - 1)
+        trail = list(self._tcp_trail)
+        if len(trail) > trail_capacity:
+            trail = trail[-trail_capacity:] if trail_capacity else []
+        point_count = len(trail)
+        axis = np.eye(3).reshape(-1)
+        for index, point in enumerate(trail):
+            fraction = (index + 1) / point_count
+            rgba = np.array(
+                [
+                    0.05 + 0.05 * fraction,
+                    0.35 + 0.55 * fraction,
+                    0.95,
+                    0.7 + 0.3 * fraction,
+                ],
+                dtype=np.float32,
+            )
+            mujoco.mjv_initGeom(
+                scene.geoms[scene.ngeom],
+                mujoco.mjtGeom.mjGEOM_SPHERE,
+                np.array([0.0045, 0.0, 0.0]),
+                point,
+                axis,
+                rgba,
+            )
+            scene.ngeom += 1
+        if scene.ngeom < scene.maxgeom:
+            mujoco.mjv_initGeom(
+                scene.geoms[scene.ngeom],
+                mujoco.mjtGeom.mjGEOM_SPHERE,
+                np.array([0.01, 0.0, 0.0]),
+                position,
+                axis,
+                np.array([1.0, 0.25, 0.05, 1.0], dtype=np.float32),
+            )
+            scene.ngeom += 1
+
     def release_selected_energy_unit(self, selected_body_id: int) -> None:
         """Releases a selected energy unit from its magnetic constraint."""
         if not self.draggable_energy_units:
             return
-        if selected_body_id not in self._energy_unit_equalities:
-            return
-        if (
-            selected_body_id in self._pulling_energy_units
-            or selected_body_id in self._released_energy_units
-        ):
-            return
-        equality_id = self._energy_unit_equalities[selected_body_id]
-        self.data.eq_active[equality_id] = 0
-        qpos_address = self._energy_unit_qpos_addresses[selected_body_id]
-        pose = self.data.qpos[qpos_address : qpos_address + 7].copy()
-        rotation = np.empty(9, dtype=np.float64)
-        mujoco.mju_quat2Mat(rotation, pose[3:7])
-        extraction_axis = rotation.reshape(3, 3)[:, 2].copy()
-        self._extraction_initial_poses[selected_body_id] = (
-            pose[:3].copy(),
-            pose[3:7].copy(),
-            extraction_axis,
-        )
-        self._pulling_energy_units.add(selected_body_id)
-        self.get_logger().info(
-            "Started magnetic extraction for energy unit: "
-            f"{mujoco.mj_id2name(
-                self.model,
-                mujoco.mjtObj.mjOBJ_BODY,
-                selected_body_id,
-            )}"
-        )
+        self._energy_units.release(selected_body_id)
 
     def apply_latest(self) -> None:
         if self._latest_odometry is not None:
@@ -271,149 +350,9 @@ class ArmViewerNode(Node):
                 self.data.qvel[dof_adr] = self._latest_message.velocity[source]
         mujoco.mj_forward(self.model, self.data)
 
-    def _complete_energy_unit_extraction(self, body_id: int) -> None:
-        self._pulling_energy_units.discard(body_id)
-        self._released_energy_units.add(body_id)
-        self._collision_pending_energy_units.add(body_id)
-        self.get_logger().info(
-            "Energy unit extraction complete: "
-            f"{mujoco.mj_id2name(
-                self.model,
-                mujoco.mjtObj.mjOBJ_BODY,
-                body_id,
-            )}"
-        )
-
-    def _try_enable_energy_unit_collision(self, body_id: int) -> None:
-        affected_geoms = [
-            geom_id
-            for geom_id in range(self.model.ngeom)
-            if int(self.model.geom_bodyid[geom_id]) == body_id
-        ]
-        for geom_id in affected_geoms:
-            self.model.geom_conaffinity[geom_id] |= 2
-        self.model.body_conaffinity[body_id] |= 2
-        mujoco.mj_forward(self.model, self.data)
-
-        penetrates_station = False
-        for contact in self.data.contact:
-            body1 = int(
-                self.model.geom_bodyid[int(contact.geom1)]
-            )
-            body2 = int(
-                self.model.geom_bodyid[int(contact.geom2)]
-            )
-            if body_id not in (body1, body2):
-                continue
-            other_body = body2 if body1 == body_id else body1
-            other_name = mujoco.mj_id2name(
-                self.model,
-                mujoco.mjtObj.mjOBJ_BODY,
-                other_body,
-            )
-            if other_name and (
-                other_name == "energy_storage_solids"
-                or other_name.startswith("storage_post_")
-            ):
-                penetrates_station = True
-                break
-
-        if penetrates_station:
-            for geom_id in affected_geoms:
-                self.model.geom_conaffinity[geom_id] &= ~2
-            self.model.body_conaffinity[body_id] &= ~2
-            return
-
-        self._collision_pending_energy_units.discard(body_id)
-        self.get_logger().info(
-            "Energy unit collision enabled: "
-            f"{mujoco.mj_id2name(
-                self.model,
-                mujoco.mjtObj.mjOBJ_BODY,
-                body_id,
-            )}"
-        )
-
-    def _constrain_pulling_energy_units(self) -> None:
-        for body_id in tuple(self._pulling_energy_units):
-            qpos_address = self._energy_unit_qpos_addresses[body_id]
-            dof_address = self._energy_unit_dof_addresses[body_id]
-            (
-                origin,
-                initial_quaternion,
-                extraction_axis,
-            ) = self._extraction_initial_poses[body_id]
-            displacement = (
-                self.data.qpos[qpos_address : qpos_address + 3] - origin
-            )
-            axial_distance = float(displacement @ extraction_axis)
-            extraction_distance = self._energy_unit_extraction_distances[
-                body_id
-            ]
-            axial_distance = float(
-                np.clip(
-                    axial_distance,
-                    0.0,
-                    extraction_distance,
-                )
-            )
-            lateral_offset = displacement - (
-                float(displacement @ extraction_axis) * extraction_axis
-            )
-            lateral_distance = float(np.linalg.norm(lateral_offset))
-            if lateral_distance > self._extraction_lateral_clearance_m:
-                lateral_offset *= (
-                    self._extraction_lateral_clearance_m / lateral_distance
-                )
-            self.data.qpos[qpos_address : qpos_address + 3] = (
-                origin
-                + extraction_axis * axial_distance
-                + lateral_offset
-            )
-            current_quaternion = self.data.qpos[
-                qpos_address + 3 : qpos_address + 7
-            ]
-            quaternion_dot = float(
-                np.clip(
-                    abs(current_quaternion @ initial_quaternion),
-                    0.0,
-                    1.0,
-                )
-            )
-            rotation_angle = 2.0 * np.arccos(quaternion_dot)
-            if rotation_angle > self._extraction_angular_clearance_rad:
-                interpolation = (
-                    self._extraction_angular_clearance_rad
-                    / rotation_angle
-                )
-                reference_quaternion = initial_quaternion.copy()
-                if current_quaternion @ reference_quaternion < 0.0:
-                    reference_quaternion = -reference_quaternion
-                limited_quaternion = (
-                    (1.0 - interpolation) * reference_quaternion
-                    + interpolation * current_quaternion
-                )
-                limited_quaternion /= np.linalg.norm(limited_quaternion)
-                self.data.qpos[
-                    qpos_address + 3 : qpos_address + 7
-                ] = limited_quaternion
-            linear_velocity = self.data.qvel[
-                dof_address : dof_address + 3
-            ]
-            axial_velocity = float(linear_velocity @ extraction_axis)
-            self.data.qvel[dof_address : dof_address + 3] = (
-                axial_velocity * extraction_axis
-            )
-            self.data.qvel[dof_address + 3 : dof_address + 6] *= 0.5
-            if axial_distance >= extraction_distance - 1e-6:
-                self._complete_energy_unit_extraction(body_id)
-
     def step_released_energy_units(self) -> None:
         """Advances free-object physics while magnetic constraints are off."""
-        if not (
-            self._released_energy_units
-            or self._pulling_energy_units
-        ):
+        if not self._energy_units.has_active_units:
             return
         if self._latest_message is None:
             arm_position = self.data.qpos[
@@ -454,9 +393,8 @@ class ArmViewerNode(Node):
             self.data.qpos[self._arm_qpos_addresses] = arm_position
             self.data.qvel[self._arm_dof_addresses] = arm_velocity
             mujoco.mj_step(self.model, self.data)
-            self._constrain_pulling_energy_units()
-        for body_id in tuple(self._collision_pending_energy_units):
-            self._try_enable_energy_unit_collision(body_id)
+            self._energy_units.constrain_pulling_units()
+        self._energy_units.enable_pending_collisions()
         self.apply_latest()
 
 
@@ -477,6 +415,7 @@ def main(args=None) -> None:
                 node.apply_latest()
                 node.release_selected_energy_unit(mj_viewer.perturb.select)
                 node.step_released_energy_units()
+                node.update_tcp_visualization(mj_viewer)
                 mj_viewer.sync()
                 time.sleep(1.0 / 60.0)
         except KeyboardInterrupt:

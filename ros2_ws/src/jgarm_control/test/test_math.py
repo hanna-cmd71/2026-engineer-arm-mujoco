@@ -5,8 +5,13 @@ import unittest
 
 from ament_index_python.packages import get_package_share_directory
 import numpy as np
+from scipy.spatial.transform import Rotation
 
-from jgarm_control.controller import PDGains, PDGravityController
+from jgarm_control.controller import (
+    JointImpedanceController,
+    PDGains,
+    PDGravityController,
+)
 from jgarm_control.dynamics import PinocchioDynamics
 from jgarm_control.hardware_profile import EngineerHardwareProfile
 from jgarm_control.kinematics import Kinematics
@@ -30,6 +35,26 @@ class ControlMathTest(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertLess(result.position_error_m, 1e-5)
         self.assertLess(result.rotation_error_rad, 1e-4)
+
+    def test_kdl_jacobian_matches_finite_difference(self) -> None:
+        kinematics = Kinematics(self.urdf_path)
+        joints = np.array([0.2, -0.7, 0.6, 0.1, 0.3, -0.2])
+        analytic = kinematics.jacobian(joints)
+        numerical = np.zeros((6, 6))
+        step = 1e-6
+        base_pose = kinematics.forward(joints)
+        for index in range(6):
+            moved = joints.copy()
+            moved[index] += step
+            moved_pose = kinematics.forward(moved)
+            numerical[:3, index] = (
+                moved_pose[:3, 3] - base_pose[:3, 3]
+            ) / step
+            delta = moved_pose[:3, :3] @ base_pose[:3, :3].T
+            numerical[3:, index] = (
+                Rotation.from_matrix(delta).as_rotvec() / step
+            )
+        np.testing.assert_allclose(analytic, numerical, atol=1e-5)
 
     def test_pinocchio_gravity_is_finite(self) -> None:
         dynamics = PinocchioDynamics(self.urdf_path)
@@ -153,6 +178,128 @@ class ControlMathTest(unittest.TestCase):
             command.effort_nm,
             np.full(6, 1.0 + np.tanh(0.2)),
         )
+
+    def test_pinocchio_mass_matrix_and_coriolis(self) -> None:
+        dynamics = PinocchioDynamics(self.urdf_path)
+        position = np.array([0.1, -0.8, 0.8, 0.1, 0.3, -0.1])
+        velocity = np.array([0.2, -0.1, 0.15, 0.05, -0.2, 0.1])
+
+        mass = dynamics.mass_matrix(position)
+        coriolis = dynamics.coriolis_torque(position, velocity)
+
+        self.assertEqual(mass.shape, (6, 6))
+        np.testing.assert_allclose(mass, mass.T, atol=1e-12)
+        self.assertTrue(np.all(np.linalg.eigvalsh(mass) > 0.0))
+        self.assertEqual(coriolis.shape, (6,))
+        self.assertTrue(np.all(np.isfinite(coriolis)))
+        np.testing.assert_allclose(
+            dynamics.coriolis_torque(position, np.zeros(6)),
+            0.0,
+            atol=1e-12,
+        )
+
+    def test_impedance_zero_error_returns_gravity(self) -> None:
+        dynamics = PinocchioDynamics(self.urdf_path)
+        position = np.asarray(POWER_ON_POSITION_RAD)
+        controller = JointImpedanceController(
+            PDGains(np.ones(6), np.ones(6)),
+            np.full(6, 100.0),
+            dynamics,
+        )
+        feedback = JointFeedback(
+            position,
+            np.zeros(6),
+            np.zeros(6),
+            np.ones(6, dtype=bool),
+        )
+
+        command = controller.compute(feedback, position)
+
+        np.testing.assert_allclose(
+            command.effort_nm,
+            dynamics.gravity_torque(position),
+            atol=1e-9,
+        )
+
+    def test_impedance_position_error_uses_stiffness(self) -> None:
+        dynamics = PinocchioDynamics(self.urdf_path)
+        gains = PDGains(np.ones(6), np.zeros(6))
+        controller = JointImpedanceController(
+            gains,
+            np.full(6, 100.0),
+            dynamics,
+        )
+        position = np.zeros(6)
+        target = np.array([0.05, 0.0, 0.0, 0.0, 0.0, 0.0])
+        feedback = JointFeedback(
+            position,
+            np.zeros(6),
+            np.zeros(6),
+            np.ones(6, dtype=bool),
+        )
+        expected = (
+            target - position
+            + dynamics.gravity_torque(position)
+        )
+
+        command = controller.compute(feedback, target)
+
+        np.testing.assert_allclose(
+            command.effort_nm,
+            expected,
+            atol=1e-9,
+        )
+
+    def test_impedance_uses_inertia_feedforward(self) -> None:
+        dynamics = PinocchioDynamics(self.urdf_path)
+        controller = JointImpedanceController(
+            PDGains(np.zeros(6), np.zeros(6)),
+            np.full(6, 100.0),
+            dynamics,
+        )
+        position = np.zeros(6)
+        acceleration = np.array([0.1, -0.2, 0.05, 0.0, 0.1, -0.05])
+        feedback = JointFeedback(
+            position,
+            np.zeros(6),
+            np.zeros(6),
+            np.ones(6, dtype=bool),
+        )
+        expected = (
+            dynamics.mass_matrix(position) @ acceleration
+            + dynamics.gravity_torque(position)
+        )
+
+        command = controller.compute(
+            feedback,
+            position,
+            target_acceleration_rad_s2=acceleration,
+        )
+
+        np.testing.assert_allclose(
+            command.effort_nm,
+            expected,
+            atol=1e-9,
+        )
+
+    def test_impedance_can_disable_gravity(self) -> None:
+        dynamics = PinocchioDynamics(self.urdf_path)
+        controller = JointImpedanceController(
+            PDGains(np.ones(6), np.ones(6)),
+            np.full(6, 100.0),
+            dynamics,
+            gravity_enabled=False,
+        )
+        feedback = JointFeedback(
+            np.zeros(6),
+            np.zeros(6),
+            np.zeros(6),
+            np.ones(6, dtype=bool),
+        )
+
+        command = controller.compute(feedback, np.zeros(6))
+
+        np.testing.assert_allclose(command.effort_nm, 0.0, atol=1e-12)
 
 
 if __name__ == "__main__":

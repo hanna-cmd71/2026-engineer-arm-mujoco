@@ -20,7 +20,11 @@
 #include <std_srvs/srv/trigger.hpp>
 #include <tf2_ros/transform_broadcaster.hpp>
 
+#include "jgarm_sim_cpp/hardware_profile.hpp"
+
 namespace jgarm_sim_cpp {
+
+enum class VectorConstraint { kNone, kNonNegative, kPositive };
 
 class MujocoSimNode final : public rclcpp::Node {
  public:
@@ -45,10 +49,13 @@ class MujocoSimNode final : public rclcpp::Node {
         "hardware_profile.plant_friction_enabled", true);
     plant_breakaway_enabled_ = declare_parameter<bool>(
         "hardware_profile.plant_breakaway_enabled", true);
+    startup_hold_enabled_ = declare_parameter<bool>(
+        "startup_hold_enabled", true);
 
     effort_limits_ = declare_vector6(
         "hardware_profile.effort_limits_nm",
-        {10.0, 63.0, 35.0, 10.0, 6.0, 3.0});
+        {10.0, 63.0, 35.0, 10.0, 6.0, 3.0},
+        VectorConstraint::kPositive);
     gravity_p_ = declare_vector6(
         "hardware_profile.gravity_p_nm",
         {0.0, 20.284, -15.112, -0.579, 16.368, 0.0});
@@ -60,22 +67,28 @@ class MujocoSimNode final : public rclcpp::Node {
         {0.0, -22.244, 1.534, 0.0, -13.608, 0.0});
     friction_torque_ = declare_vector6(
         "hardware_profile.friction_torque_nm",
-        {0.0, 11.6, 7.4, 0.0, 0.75, 0.0});
+        {0.0, 11.6, 7.4, 0.0, 0.75, 0.0},
+        VectorConstraint::kNonNegative);
     joint_viscous_damping_ = declare_vector6(
         "hardware_profile.joint_viscous_damping_nm_s_rad",
-        {0.05, 0.05, 0.05, 0.05, 0.05, 0.05});
+        {0.05, 0.05, 0.05, 0.05, 0.05, 0.05},
+        VectorConstraint::kNonNegative);
     joint_armature_ = declare_vector6(
         "hardware_profile.joint_armature_kg_m2",
-        {0.001, 0.001, 0.001, 0.001, 0.001, 0.001});
+        {0.001, 0.001, 0.001, 0.001, 0.001, 0.001},
+        VectorConstraint::kNonNegative);
     actuator_time_constant_ = declare_vector6(
         "hardware_profile.actuator_time_constant_s",
-        {0.005, 0.005, 0.005, 0.005, 0.005, 0.005});
+        {0.005, 0.005, 0.005, 0.005, 0.005, 0.005},
+        VectorConstraint::kPositive);
     friction_velocity_scale_ = declare_vector6(
         "hardware_profile.friction_velocity_scale_rad_s",
-        {0.2, 0.2, 0.2, 0.2, 0.2, 0.2});
+        {0.2, 0.2, 0.2, 0.2, 0.2, 0.2},
+        VectorConstraint::kPositive);
     breakaway_torque_ = declare_vector6(
         "hardware_profile.breakaway_torque_nm",
-        {0.0, 11.25, 10.0, 0.0, 0.4, 0.2});
+        {0.0, 11.25, 10.0, 0.0, 0.4, 0.2},
+        VectorConstraint::kNonNegative);
     gravity_j5_config_weight_ = declare_parameter<double>(
         "hardware_profile.gravity_j5_config_weight", 0.35);
     gravity_j5_conservative_coupling_ = declare_parameter<bool>(
@@ -84,10 +97,17 @@ class MujocoSimNode final : public rclcpp::Node {
         "hardware_profile.plant_breakaway_velocity_scale_rad_s", 0.02);
 
     if (cycle_us_ <= 0 || state_publish_divider_ <= 0
-        || command_timeout_s_ <= 0.0 || state_rate_hz <= 0.0
+        || !std::isfinite(command_timeout_s_) || command_timeout_s_ <= 0.0
+        || !std::isfinite(state_rate_hz) || state_rate_hz <= 0.0
+        || !std::isfinite(breakaway_velocity_scale_)
         || breakaway_velocity_scale_ <= 0.0
+        || !std::isfinite(gravity_j5_config_weight_)
+        || gravity_j5_config_weight_ <= 0.0
+        || !std::isfinite(mobile_command_timeout_s_)
         || mobile_command_timeout_s_ <= 0.0
+        || !std::isfinite(mobile_max_linear_velocity_)
         || mobile_max_linear_velocity_ <= 0.0
+        || !std::isfinite(mobile_max_angular_velocity_)
         || mobile_max_angular_velocity_ <= 0.0) {
       throw std::invalid_argument(
           "Simulation timing parameters must be positive");
@@ -97,7 +117,8 @@ class MujocoSimNode final : public rclcpp::Node {
                1.0e6 / (static_cast<double>(cycle_us_) * state_rate_hz))));
 
     std::array<char, 1000> error{};
-    model_ = mj_loadXML(model_path_.c_str(), nullptr, error.data(), error.size());
+    model_ = mj_loadXML(
+        model_path_.c_str(), nullptr, error.data(), error.size());
     if (model_ == nullptr) {
       throw std::runtime_error(
           "Failed to load MuJoCo model: " + std::string(error.data()));
@@ -260,7 +281,8 @@ class MujocoSimNode final : public rclcpp::Node {
 
   std::array<double, 6> declare_vector6(
       const std::string& name,
-      std::initializer_list<double> defaults) {
+      std::initializer_list<double> defaults,
+      VectorConstraint constraint = VectorConstraint::kNone) {
     const std::vector<double> values = declare_parameter<std::vector<double>>(
         name, std::vector<double>(defaults));
     if (values.size() != kJointCount) {
@@ -271,9 +293,14 @@ class MujocoSimNode final : public rclcpp::Node {
       if (!std::isfinite(values[index])) {
         throw std::invalid_argument(name + " must contain finite values");
       }
-      if (name == "hardware_profile.actuator_time_constant_s"
+      if (constraint == VectorConstraint::kPositive
           && values[index] <= 0.0) {
         throw std::invalid_argument(name + " must contain positive values");
+      }
+      if (constraint == VectorConstraint::kNonNegative
+          && values[index] < 0.0) {
+        throw std::invalid_argument(
+            name + " must contain non-negative values");
       }
       result[index] = values[index];
     }
@@ -281,45 +308,32 @@ class MujocoSimNode final : public rclcpp::Node {
   }
 
   std::array<double, 6> compute_gravity_load() const {
-    std::array<double, 6> result = gravity_bias_;
-    const double theta_1 = data_->qpos[qpos_adr_[1]];
-    const double theta_2 = theta_1 + data_->qpos[qpos_adr_[2]];
-    const double theta_3 = theta_2 - data_->qpos[qpos_adr_[4]];
-    const double phi_5 =
-        gravity_j5_conservative_coupling_
-            ? -data_->qpos[qpos_adr_[4]]
-            : gravity_j5_config_weight_ * theta_2 - data_->qpos[qpos_adr_[4]];
-
-    const auto cosine_sum = [&](double theta, std::size_t index) {
-      return gravity_p_[index] * std::cos(theta)
-             + gravity_q_[index] * std::sin(theta);
-    };
-    result[1] += cosine_sum(theta_1, 1) + cosine_sum(theta_2, 2)
-                 + cosine_sum(theta_3, 3);
-    result[2] += cosine_sum(theta_2, 2) + cosine_sum(theta_3, 3);
-    result[4] += cosine_sum(phi_5, 4);
-    if (gravity_j5_conservative_coupling_) {
-      result[4] += gravity_p_[3];
-      result[4] -= cosine_sum(theta_3, 3);
+    std::array<double, 6> position{};
+    for (std::size_t index = 0; index < kJointCount; ++index) {
+      position[index] = data_->qpos[qpos_adr_[index]];
     }
-    return result;
+    return ComputeGravityLoad(
+        position,
+        gravity_p_,
+        gravity_q_,
+        gravity_bias_,
+        gravity_j5_config_weight_,
+        gravity_j5_conservative_coupling_);
   }
 
   std::array<double, 6> compute_friction_load() const {
-    std::array<double, 6> result{};
-    if (!plant_friction_enabled_) {
-      return result;
-    }
+    std::array<double, 6> velocity{};
     for (std::size_t index = 0; index < kJointCount; ++index) {
-      const double velocity = data_->qvel[dof_adr_[index]];
-      result[index] = friction_torque_[index]
-                      * std::tanh(velocity / friction_velocity_scale_[index]);
-      if (plant_breakaway_enabled_) {
-        result[index] += breakaway_torque_[index]
-                         * std::tanh(velocity / breakaway_velocity_scale_);
-      }
+      velocity[index] = data_->qvel[dof_adr_[index]];
     }
-    return result;
+    return ComputeFrictionLoad(
+        velocity,
+        friction_torque_,
+        friction_velocity_scale_,
+        breakaway_torque_,
+        breakaway_velocity_scale_,
+        plant_friction_enabled_,
+        plant_breakaway_enabled_);
   }
 
   void command_callback(
@@ -471,7 +485,11 @@ class MujocoSimNode final : public rclcpp::Node {
     const std::array<double, 6> friction_load = compute_friction_load();
     for (std::size_t index = 0; index < kJointCount; ++index) {
       const double target_effort =
-          command_active ? command_effort_[index] : 0.0;
+          command_active
+              ? command_effort_[index]
+              : (startup_hold_enabled_ && !command_received_
+                     ? data_->qfrc_bias[dof_adr_[index]]
+                     : 0.0);
       const double alpha =
           static_cast<double>(cycle_us_) * 1.0e-6
           / (actuator_time_constant_[index]
@@ -553,6 +571,7 @@ class MujocoSimNode final : public rclcpp::Node {
   bool plant_gravity_enabled_{true};
   bool plant_friction_enabled_{true};
   bool plant_breakaway_enabled_{true};
+  bool startup_hold_enabled_{true};
   double gravity_j5_config_weight_{0.35};
   bool gravity_j5_conservative_coupling_{true};
   double breakaway_velocity_scale_{0.02};

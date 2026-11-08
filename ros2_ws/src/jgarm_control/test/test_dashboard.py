@@ -1,6 +1,7 @@
 """Dashboard dependency and module import tests."""
 
 import os
+from pathlib import Path
 import unittest
 
 import numpy as np
@@ -45,6 +46,20 @@ class DashboardImportTest(unittest.TestCase):
 
         self.assertTrue(hasattr(dashboard_node, "DashboardNode"))
         self.assertEqual(dashboard_node.JOINT_LIMITS.shape, (6, 2))
+
+    def test_joint_limits_match_urdf(self) -> None:
+        from ament_index_python.packages import get_package_share_directory
+
+        from jgarm_control.dashboard_node import JOINT_LIMITS
+        from jgarm_control.kinematics import Kinematics
+
+        urdf_path = (
+            Path(get_package_share_directory("jgarm_description"))
+            / "urdf"
+            / "JGarm.urdf"
+        )
+        urdf_limits = Kinematics(urdf_path).joint_limits_rad
+        np.testing.assert_allclose(JOINT_LIMITS, urdf_limits, atol=0.0)
 
     def test_torque_plot_renders_offscreen(self) -> None:
         from PyQt5 import QtWidgets

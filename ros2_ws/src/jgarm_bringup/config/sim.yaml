@@ -2,6 +2,7 @@ mujoco_sim_node:
   ros__parameters:
     cycle_us: 1000
     command_timeout_s: 0.1
+    startup_hold_enabled: true
     mobile_base.command_timeout_s: 0.25
     mobile_base.max_linear_velocity: 0.5
     mobile_base.max_angular_velocity: 1.5

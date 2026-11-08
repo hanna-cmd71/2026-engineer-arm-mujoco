@@ -93,12 +93,29 @@ class JointTrajectory:
 
     def sample(self, elapsed_s: float) -> tuple[np.ndarray, np.ndarray]:
         """Samples position and velocity with cubic Hermite interpolation."""
-        if elapsed_s <= self.times_s[0]:
-            return self.positions_rad[0].copy(), self.velocities_rad_s[0].copy()
-        if elapsed_s >= self.times_s[-1]:
-            return self.positions_rad[-1].copy(), np.zeros(JOINT_COUNT)
+        position, velocity, _ = self.sample_with_acceleration(elapsed_s)
+        return position, velocity
 
-        segment = int(np.searchsorted(self.times_s, elapsed_s, side="right") - 1)
+    def sample_with_acceleration(
+        self, elapsed_s: float
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Samples position, velocity, and acceleration."""
+        if elapsed_s <= self.times_s[0]:
+            return (
+                self.positions_rad[0].copy(),
+                self.velocities_rad_s[0].copy(),
+                np.zeros(JOINT_COUNT),
+            )
+        if elapsed_s >= self.times_s[-1]:
+            return (
+                self.positions_rad[-1].copy(),
+                np.zeros(JOINT_COUNT),
+                np.zeros(JOINT_COUNT),
+            )
+
+        segment = int(
+            np.searchsorted(self.times_s, elapsed_s, side="right") - 1
+        )
         start_time = self.times_s[segment]
         end_time = self.times_s[segment + 1]
         duration = end_time - start_time
@@ -114,11 +131,21 @@ class JointTrajectory:
         dh10 = 3.0 * ratio2 - 4.0 * ratio + 1.0
         dh01 = (-6.0 * ratio2 + 6.0 * ratio) / duration
         dh11 = 3.0 * ratio2 - 2.0 * ratio
+        d2h00 = (12.0 * ratio - 6.0) / (duration * duration)
+        d2h01 = (-12.0 * ratio + 6.0) / (duration * duration)
+        d2h10 = (6.0 * ratio - 4.0) / duration
+        d2h11 = (6.0 * ratio - 2.0) / duration
 
         p0 = self.positions_rad[segment]
         p1 = self.positions_rad[segment + 1]
         v0 = self.velocities_rad_s[segment]
         v1 = self.velocities_rad_s[segment + 1]
-        position = h00 * p0 + h10 * duration * v0 + h01 * p1 + h11 * duration * v1
+        position = (
+            h00 * p0
+            + h10 * duration * v0
+            + h01 * p1
+            + h11 * duration * v1
+        )
         velocity = dh00 * p0 + dh10 * v0 + dh01 * p1 + dh11 * v1
-        return position, velocity
+        acceleration = d2h00 * p0 + d2h10 * v0 + d2h01 * p1 + d2h11 * v1
+        return position, velocity, acceleration
